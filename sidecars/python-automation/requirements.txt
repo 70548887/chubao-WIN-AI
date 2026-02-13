@@ -1,0 +1,18 @@
+# Chubao AI - Python Sidecar Dependencies
+
+# GUI Automation
+pywinauto>=0.6.8
+pyautogui>=0.9.54
+pywin32>=306
+
+# OCR
+paddlepaddle>=2.5.0
+paddleocr>=2.7.0
+pillow>=10.0.0
+
+# HTTP Server
+flask>=3.0.0
+flask-cors>=4.0.0
+
+# Utils
+python-dotenv>=1.0.0

@@ -1,0 +1,71 @@
+{
+  "platforms": {
+    "lark": {
+      "enabled": true,
+      "type": "mcp",
+      "config": {
+        "appId": "${LARK_APP_ID}",
+        "appSecret": "${LARK_APP_SECRET}",
+        "encryptKey": "${LARK_ENCRYPT_KEY}",
+        "verificationToken": "${LARK_VERIFICATION_TOKEN}"
+      },
+      "features": {
+        "messaging": true,
+        "documents": true,
+        "calendar": true,
+        "approval": true
+      },
+      "mcpServer": "lark-openapi-mcp"
+    },
+    "telegram": {
+      "enabled": true,
+      "type": "bot",
+      "config": {
+        "botToken": "${TELEGRAM_BOT_TOKEN}",
+        "allowedUsers": []
+      },
+      "features": {
+        "messaging": true,
+        "files": true,
+        "commands": true
+      }
+    },
+    "whatsapp": {
+      "enabled": false,
+      "type": "bridge",
+      "config": {
+        "sessionPath": "./sessions/whatsapp"
+      },
+      "features": {
+        "messaging": true,
+        "files": true
+      },
+      "note": "需要扫码登录 WhatsApp Web"
+    },
+    "discord": {
+      "enabled": false,
+      "type": "bot",
+      "config": {
+        "botToken": "${DISCORD_BOT_TOKEN}",
+        "guildId": "${DISCORD_GUILD_ID}"
+      },
+      "features": {
+        "messaging": true,
+        "commands": true
+      }
+    },
+    "local-cli": {
+      "enabled": true,
+      "type": "cli",
+      "config": {
+        "prompt": "chubao> ",
+        "historyFile": "./history/cli_history.txt"
+      }
+    }
+  },
+  "routing": {
+    "defaultPlatform": "local-cli",
+    "broadcastEnabled": false,
+    "messageQueueSize": 100
+  }
+}

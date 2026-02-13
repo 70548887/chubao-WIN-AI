@@ -1,0 +1,120 @@
+{
+  "skills": {
+    "email": {
+      "enabled": true,
+      "provider": "outlook",
+      "config": {
+        "clientId": "${OUTLOOK_CLIENT_ID}",
+        "tenantId": "${OUTLOOK_TENANT_ID}"
+      },
+      "capabilities": [
+        "read",
+        "send",
+        "classify",
+        "archive",
+        "search"
+      ],
+      "automation": {
+        "autoClassify": true,
+        "smartReply": true,
+        "priorityInbox": true
+      }
+    },
+    "calendar": {
+      "enabled": true,
+      "providers": ["outlook", "google"],
+      "capabilities": [
+        "read",
+        "create",
+        "update",
+        "delete",
+        "conflict-detection"
+      ],
+      "automation": {
+        "smartScheduling": true,
+        "reminderSync": true,
+        "conflictAlert": true
+      }
+    },
+    "flight": {
+      "enabled": true,
+      "supportedAirlines": [
+        "中国国航",
+        "东方航空", 
+        "南方航空",
+        "海南航空"
+      ],
+      "capabilities": [
+        "checkin",
+        "seat-selection",
+        "flight-status"
+      ],
+      "automation": {
+        "autoCheckin": true,
+        "preferredSeats": ["window", "aisle"],
+        "checkinAdvanceHours": 24
+      }
+    },
+    "coding": {
+      "enabled": true,
+      "tools": [
+        {
+          "name": "qoder",
+          "path": "qoder",
+          "type": "cli"
+        },
+        {
+          "name": "vscode",
+          "path": "code",
+          "type": "gui"
+        },
+        {
+          "name": "git",
+          "path": "git",
+          "type": "cli"
+        }
+      ],
+      "capabilities": [
+        "open-project",
+        "run-command",
+        "file-edit",
+        "git-operations"
+      ],
+      "automation": {
+        "autoSave": true,
+        "formatOnSave": true
+      }
+    },
+    "file-manager": {
+      "enabled": true,
+      "capabilities": [
+        "search",
+        "organize",
+        "backup",
+        "compress"
+      ],
+      "automation": {
+        "autoOrganize": false,
+        "duplicateDetection": true
+      }
+    },
+    "browser": {
+      "enabled": true,
+      "defaultBrowser": "edge",
+      "capabilities": [
+        "open-url",
+        "search",
+        "screenshot",
+        "form-fill"
+      ]
+    }
+  },
+  "skillPriority": [
+    "email",
+    "calendar",
+    "coding",
+    "flight",
+    "file-manager",
+    "browser"
+  ]
+}

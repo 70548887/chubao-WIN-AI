@@ -1,0 +1,73 @@
+{
+  "app": {
+    "name": "chubao-WIN-AI",
+    "version": "0.1.0",
+    "description": "Windows 本地 AI 自动化控制工具",
+    "techStack": {
+      "framework": "OpenClaw 二次开发",
+      "language": "TypeScript/Node.js",
+      "guiAutomation": "UI-TARS",
+      "deployment": "Electron EXE"
+    }
+  },
+  "llm": {
+    "provider": "anthropic",
+    "model": "claude-sonnet-4-20250514",
+    "apiKey": "${ANTHROPIC_API_KEY}",
+    "maxTokens": 4096,
+    "temperature": 0.7
+  },
+  "database": {
+    "type": "postgresql",
+    "host": "localhost",
+    "port": 5432,
+    "database": "chubao_ai",
+    "user": "${DB_USER}",
+    "password": "${DB_PASSWORD}",
+    "extensions": ["pgvector"],
+    "pool": {
+      "min": 2,
+      "max": 10
+    }
+  },
+  "memory": {
+    "enabled": true,
+    "embeddingModel": "text-embedding-3-small",
+    "vectorDimension": 1536,
+    "maxContextTokens": 8000,
+    "compactionThreshold": 6000
+  },
+  "automation": {
+    "gui": {
+      "engine": "ui-tars",
+      "fallback": "pywinauto",
+      "screenshotInterval": 500,
+      "actionDelay": 200
+    },
+    "recognition": {
+      "method": "hybrid",
+      "useOCR": true,
+      "useAccessibilityAPI": true,
+      "useVision": true
+    }
+  },
+  "security": {
+    "confirmDangerousActions": true,
+    "sandboxMode": false,
+    "allowedPaths": [
+      "C:\\Users\\YaTou\\Documents",
+      "C:\\Users\\YaTou\\Desktop"
+    ],
+    "blockedCommands": [
+      "format",
+      "del /s",
+      "rmdir /s"
+    ]
+  },
+  "logging": {
+    "level": "info",
+    "file": "./logs/app.log",
+    "maxSize": "10MB",
+    "maxFiles": 5
+  }
+}

@@ -1,0 +1,26 @@
+[
+  {
+    "id": "chubao-001",
+    "fact": "项目启动，开始设计方案制定",
+    "category": "milestone",
+    "timestamp": "2026-02-13",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "chubao-002",
+    "fact": "确定技术栈：OpenClaw + TypeScript + UI-TARS + Electron",
+    "category": "milestone",
+    "timestamp": "2026-02-13",
+    "source": "conversation",
+    "status": "active"
+  },
+  {
+    "id": "chubao-003",
+    "fact": "采用 Clawdbot 三层超级记忆架构",
+    "category": "milestone",
+    "timestamp": "2026-02-13",
+    "source": "conversation",
+    "status": "active"
+  }
+]

@@ -1,0 +1,41 @@
+# Python 依赖
+# chubao-WIN-AI
+
+# ============ 桌面识别 (本地免费) ============
+
+# OCR 文字识别
+paddlepaddle>=2.5.0          # PaddleOCR 基础框架
+paddleocr>=2.7.0             # PaddleOCR 主包 (首选)
+pytesseract>=0.3.10          # Tesseract OCR (备选)
+
+# GUI 自动化
+pywinauto>=0.6.8             # Windows UI Automation API (首选)
+pyautogui>=0.9.54            # 鼠标/键盘模拟
+pillow>=10.0.0               # 图像处理
+
+# 视觉识别 (UI-TARS/OmniParser 相关)
+torch>=2.0.0                 # PyTorch
+torchvision>=0.15.0          # 视觉模型
+transformers>=4.36.0         # Hugging Face
+
+# ============ LLM 客户端 ============
+anthropic>=0.30.0            # Claude API
+openai>=1.0.0                # OpenAI API (备选)
+
+# ============ 向量检索 ============
+sentence-transformers>=2.2.0 # 文本嵌入
+psycopg2-binary>=2.9.0       # PostgreSQL 驱动
+pgvector>=0.2.0              # pgvector 扩展
+
+# ============ 工具库 ============
+python-dotenv>=1.0.0         # 环境变量
+pydantic>=2.0.0              # 数据验证
+rich>=13.0.0                 # 终端美化
+httpx>=0.25.0                # HTTP 客户端
+
+# ============ Windows 特定 ============
+pywin32>=306                 # Windows API
+
+# ============ 开发工具 ============
+pytest>=8.0.0                # 测试框架
+black>=24.0.0                # 代码格式化
