@@ -74,7 +74,70 @@ chubao-WIN-AI/
 - 🖥️ Windows 桌面自动化 (pywinauto + PaddleOCR)
 - 🤖 AI 对话 (Claude API)
 - 📝 三层记忆系统
-- 💬 多平台集成 (飞书、Telegram)
+- 💬 多平台集成：
+  - **飞书 (Lark)** - 企业级消息推送
+  - **Telegram** - Bot API 完整支持
+  - **WhatsApp** - Web 扫码登录
+
+## 消息平台集成
+
+Chubao AI 支持通过多种消息平台接收和发送消息：
+
+### 支持的平台
+
+| 平台 | 状态 | 功能 |
+|------|------|------|
+| 飞书 (Lark) | ✅ 已完成 | Webhook 事件、消息接收/发送、签名验证 |
+| Telegram | ✅ 已完成 | Bot API、Long Polling/Webhook、命令系统 |
+| WhatsApp | ✅ 已完成 | WhatsApp Web、扫码登录、消息队列 |
+
+### 快速配置
+
+```bash
+# 1. 编辑环境变量
+cp .env.example .env
+
+# 2. 配置消息平台（在 .env 中）
+# 飞书
+LARK_APP_ID=cli_xxx
+LARK_APP_SECRET=xxx
+
+# Telegram
+TELEGRAM_BOT_TOKEN=123456:ABC...
+
+# WhatsApp
+WHATSAPP_ENABLED=true
+
+# 3. 重启服务
+```
+
+详细配置请参考 [消息平台集成指南](docs/PLATFORMS.md)
+
+### 支持的功能
+
+- **AI 对话** - 直接发送消息与 AI 对话
+- **系统控制** - 截图、获取窗口列表
+- **记忆查询** - 搜索历史对话
+- **命令系统** - `/help`, `/status`, `/windows`, `/screenshot`
+
+## 文档
+
+- [项目设计方案](docs/DESIGN.md) - 系统架构和设计方案
+- [技术栈说明](docs/TECH_STACK.md) - 技术选型说明
+- [消息平台集成指南](docs/PLATFORMS.md) - 配置和使用指南
+- [使用示例](docs/examples/PLATFORMS_EXAMPLES.md) - 代码示例
+
+## 项目进度
+
+| 模块 | 进度 | 状态 |
+|------|------|------|
+| 前端 UI | 85% | ✅ 可用 |
+| Tauri 框架 | 60% | 🟡 Rust 代码待完善 |
+| Node.js 后端 | 85% | ✅ 核心功能完成 |
+| Python 自动化 | 90% | ✅ 功能完整 |
+| 记忆系统 | 60% | 🟡 基础完成 |
+| **消息集成** | **95%** | **✅ 三大平台完成** |
+| 打包部署 | 30% | 🟡 配置完成 |
 
 ## 许可证
 

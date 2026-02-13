@@ -117,7 +117,7 @@ $npmExe = Get-RequiredCommand -Name "npm" -Hint "请先安装 Node.js 22+ 并重
 $pythonExe = Get-RequiredCommand -Name "python" -Hint "请先安装 Python 3.9+ 并重启终端。"
 
 try {
-    if ($Mode -in @("cli", "server", "all")) {
+    if ($Mode -in @("cli", "server")) {
         $nodeProc = Start-ServiceProcess -Name "Node.js 后端" -Executable $npmExe -Arguments @("run", "dev") -WorkingDirectory $nodeDir
         $processes += $nodeProc
         $nodePort = [Environment]::GetEnvironmentVariable("NODE_PORT")
@@ -128,7 +128,7 @@ try {
         Wait-HttpHealth -ServiceName "Node.js 后端" -Url "http://127.0.0.1:$nodePort/health"
     }
 
-    if ($Mode -in @("server", "all")) {
+    if ($Mode -eq "server") {
         $pythonProc = Start-ServiceProcess -Name "Python 自动化服务" -Executable $pythonExe -Arguments @("main.py") -WorkingDirectory $pythonDir
         $processes += $pythonProc
         $pythonPort = [Environment]::GetEnvironmentVariable("PYTHON_PORT")
