@@ -1,9 +1,13 @@
+import { useLocale } from '../i18n';
+
 interface SidebarProps {
-  activeTab: 'chat' | 'automation' | 'settings';
-  onTabChange: (tab: 'chat' | 'automation' | 'settings') => void;
+  activeTab: 'chat' | 'dashboard' | 'automation' | 'settings';
+  onTabChange: (tab: 'chat' | 'dashboard' | 'automation' | 'settings') => void;
 }
 
 function Sidebar({ activeTab, onTabChange }: SidebarProps) {
+  const { t, locale, setLocale } = useLocale();
+
   return (
     <nav className="sidebar">
       <div className="logo">
@@ -17,7 +21,15 @@ function Sidebar({ activeTab, onTabChange }: SidebarProps) {
           onClick={() => onTabChange('chat')}
         >
           <span className="icon">💬</span>
-          <span className="label">对话</span>
+          <span className="label">{t.sidebar.chat}</span>
+        </button>
+
+        <button
+          className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`}
+          onClick={() => onTabChange('dashboard')}
+        >
+          <span className="icon">📊</span>
+          <span className="label">{t.sidebar.dashboard}</span>
         </button>
 
         <button
@@ -25,7 +37,7 @@ function Sidebar({ activeTab, onTabChange }: SidebarProps) {
           onClick={() => onTabChange('automation')}
         >
           <span className="icon">🖥️</span>
-          <span className="label">自动化</span>
+          <span className="label">{t.sidebar.automation}</span>
         </button>
 
         <button
@@ -33,14 +45,20 @@ function Sidebar({ activeTab, onTabChange }: SidebarProps) {
           onClick={() => onTabChange('settings')}
         >
           <span className="icon">⚙️</span>
-          <span className="label">设置</span>
+          <span className="label">{t.sidebar.settings}</span>
         </button>
       </div>
 
       <div className="sidebar-footer">
+        <button
+          className="locale-toggle"
+          onClick={() => setLocale(locale === 'zh-CN' ? 'en' : 'zh-CN')}
+        >
+          {locale === 'zh-CN' ? 'EN' : '中文'}
+        </button>
         <div className="status">
           <span className="status-dot online"></span>
-          <span>服务运行中</span>
+          <span>{t.sidebar.serviceRunning}</span>
         </div>
       </div>
     </nav>

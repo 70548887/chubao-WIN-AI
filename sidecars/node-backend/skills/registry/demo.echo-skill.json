@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "chubao.skill.v1",
+  "id": "demo.echo-skill",
+  "name": "Echo Skill",
+  "version": "0.1.0",
+  "description": "Minimal sample skill for custom module installation",
+  "enabled": true,
+  "tags": [
+    "demo",
+    "template"
+  ],
+  "source": "local",
+  "module": "./echo-skill.mjs",
+  "toolsExport": "skillTools",
+  "installedAt": "2026-02-14T02:28:12.051Z",
+  "directory": "C:\\Users\\YaTou\\Desktop\\chubao-WIN-AI\\sidecars\\node-backend\\skills\\installed\\demo.echo-skill",
+  "manifestPath": "C:\\Users\\YaTou\\Desktop\\chubao-WIN-AI\\sidecars\\node-backend\\skills\\installed\\demo.echo-skill\\skill.json",
+  "toolCount": 1
+}

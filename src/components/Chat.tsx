@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { processUserMessage } from '../core';
+import { useLocale } from '../i18n';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -8,6 +9,7 @@ interface Message {
 }
 
 function Chat() {
+  const { t } = useLocale();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -44,7 +46,7 @@ function Chat() {
     } catch (error) {
       const assistantMessage: Message = {
         role: 'assistant',
-        content: `Request failed: ${
+        content: `${t.chat.requestFailed}${
           error instanceof Error ? error.message : String(error)
         }`,
         timestamp: new Date(),
@@ -65,20 +67,19 @@ function Chat() {
   return (
     <div className="chat-container">
       <div className="chat-header">
-        <h2>Chubao AI</h2>
-        <span className="subtitle">Windows local AI assistant</span>
+        <h2>{t.chat.title}</h2>
+        <span className="subtitle">{t.chat.subtitle}</span>
       </div>
 
       <div className="messages">
         {messages.length === 0 && (
           <div className="welcome">
-            <h3>Welcome to Chubao AI</h3>
-            <p>Try messages like:</p>
+            <h3>{t.chat.welcomeTitle}</h3>
+            <p>{t.chat.welcomeHint}</p>
             <ul>
-              <li>show coding progress</li>
-              <li>list windows</li>
-              <li>check sidecar status</li>
-              <li>normal chat question</li>
+              {t.chat.welcomeItems.map((item, idx) => (
+                <li key={idx}>{item}</li>
+              ))}
             </ul>
           </div>
         )}
@@ -108,11 +109,11 @@ function Chat() {
           value={input}
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Type a message... (Enter to send)"
+          placeholder={t.chat.placeholder}
           rows={1}
         />
         <button onClick={() => void sendMessage()} disabled={loading || !input.trim()}>
-          Send
+          {t.chat.send}
         </button>
       </div>
     </div>

@@ -327,6 +327,19 @@ function Run-CoreTests {
     }
 }
 
+function Run-NodeBackendTests {
+    param(
+        [string]$ProjectRoot,
+        [string]$NpmExe
+    )
+
+    Write-Host "[verify] running node backend tests..." -ForegroundColor Cyan
+    & $NpmExe run test:node-backend --prefix $ProjectRoot
+    if ($LASTEXITCODE -ne 0) {
+        throw "[ERROR] node backend tests failed with exit code: $LASTEXITCODE"
+    }
+}
+
 Write-Header -ModeValue $Mode
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -406,6 +419,7 @@ try {
 
             Run-Smoke -ProjectRoot $projectRoot -NodePort $nodePort -PythonPort $pythonPort
             Run-CoreTests -ProjectRoot $projectRoot -NpmExe $npm
+            Run-NodeBackendTests -ProjectRoot $projectRoot -NpmExe $npm
             Run-PythonTests -ProjectRoot $projectRoot -PythonExe $python
             Write-Host ""
             Write-Host "[done] verify passed." -ForegroundColor Green
@@ -418,6 +432,11 @@ try {
         }
 
         "tauri" {
+            # Tauri mode also relies on sidecars; release well-known ports first
+            # to avoid EADDRINUSE when previously leaked dev processes exist.
+            Prepare-PortForStartup -ServiceName "Python Automation" -Port $pythonPort
+            Prepare-PortForStartup -ServiceName "Node.js Backend" -Port $nodePort
+
             $tauriProc = Start-Service -Name "Tauri App" -Executable $npm -Arguments @("run", "tauri:dev") -WorkingDirectory $projectRoot
             $processes += $tauriProc
             Wait-Process -Id $tauriProc.Id
@@ -425,6 +444,9 @@ try {
 
         "all" {
             # all is same as tauri; src-tauri manages sidecar lifecycle.
+            Prepare-PortForStartup -ServiceName "Python Automation" -Port $pythonPort
+            Prepare-PortForStartup -ServiceName "Node.js Backend" -Port $nodePort
+
             $tauriProc = Start-Service -Name "Tauri App" -Executable $npm -Arguments @("run", "tauri:dev") -WorkingDirectory $projectRoot
             $processes += $tauriProc
             Wait-Process -Id $tauriProc.Id

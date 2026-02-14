@@ -283,23 +283,7 @@ export class TelegramIntegration {
     this.bot.command('windows', async (ctx) => {
       try {
         if (!this.isAuthorized(ctx.from?.id)) return;
-
-        const response = await this.withRetry(async () => {
-          const res = await fetch('http://localhost:3200/api/windows');
-          const data = await res.json();
-          
-          if (data.success) {
-            const windows = data.windows.slice(0, 20);
-            const list = windows.map((w: any, i: number) => 
-              `${i + 1}. ${w.title}`
-            ).join('\n');
-            
-            return `🪟 当前窗口列表 (前 20 个):\n\n${list}`;
-          }
-          throw new Error('获取窗口列表失败');
-        });
-
-        await ctx.reply(response);
+        await this.handleWindowsRequest(ctx);
       } catch (error) {
         console.error('处理 /windows 命令失败:', error);
         await ctx.reply('❌ 获取窗口列表失败，请检查 Python 服务是否运行');
@@ -310,24 +294,7 @@ export class TelegramIntegration {
     this.bot.command('screenshot', async (ctx) => {
       try {
         if (!this.isAuthorized(ctx.from?.id)) return;
-
-        await ctx.reply('📸 正在截图...');
-        
-        const result = await this.withRetry(async () => {
-          const res = await fetch('http://localhost:3200/api/screenshot', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({}),
-          });
-          
-          const data = await res.json();
-          if (!data.success) {
-            throw new Error(data.error || '截图失败');
-          }
-          return data.result.path;
-        });
-        
-        await ctx.replyWithPhoto({ source: result });
+        await this.handleScreenshotRequest(ctx);
       } catch (error) {
         console.error('处理 /screenshot 命令失败:', error);
         await ctx.reply('❌ 截图失败，请检查 Python 服务是否运行');
@@ -407,20 +374,12 @@ export class TelegramIntegration {
         
         // 处理键盘按钮
         if (text === '📋 获取窗口列表') {
-          ctx.message.text = '/windows';
-          await this.bot.handleUpdate({
-            ...ctx.update,
-            message: ctx.message,
-          });
+          await this.handleWindowsRequest(ctx);
           return;
         }
         
         if (text === '📸 截图') {
-          ctx.message.text = '/screenshot';
-          await this.bot.handleUpdate({
-            ...ctx.update,
-            message: ctx.message,
-          });
+          await this.handleScreenshotRequest(ctx);
           return;
         }
         
@@ -445,21 +404,18 @@ export class TelegramIntegration {
     // 处理回调查询 (内联键盘)
     this.bot.on('callback_query', async (ctx) => {
       try {
-        const data = ctx.callbackQuery.data;
+        const callback = ctx.callbackQuery;
+        const data = 'data' in callback ? callback.data : undefined;
+        if (typeof data !== 'string') {
+          await ctx.answerCbQuery();
+          return;
+        }
         
         if (data === 'screenshot') {
-          ctx.message = { text: '/screenshot' } as any;
-          await this.bot.handleUpdate({
-            ...ctx.update,
-            message: ctx.message,
-          });
+          await this.handleScreenshotRequest(ctx);
         } else if (data === 'windows') {
-          ctx.message = { text: '/windows' } as any;
-          await this.bot.handleUpdate({
-            ...ctx.update,
-            message: ctx.message,
-          });
-        } else if (data?.startsWith('regenerate:')) {
+          await this.handleWindowsRequest(ctx);
+        } else if (data.startsWith('regenerate:')) {
           const message = data.replace('regenerate:', '');
           await this.handleChatMessage(ctx, message);
         }
@@ -470,6 +426,49 @@ export class TelegramIntegration {
         await ctx.answerCbQuery('操作失败');
       }
     });
+  }
+
+  /**
+   * 处理窗口列表请求
+   */
+  private async handleWindowsRequest(ctx: Context): Promise<void> {
+    const response = await this.withRetry(async () => {
+      const res = await fetch('http://localhost:3200/api/windows');
+      const data = await res.json();
+
+      if (data.success) {
+        const windows = data.windows.slice(0, 20);
+        const list = windows.map((w: any, i: number) => `${i + 1}. ${w.title}`).join('\n');
+        return `🪟 当前窗口列表 (前 20 个):\n\n${list}`;
+      }
+
+      throw new Error('获取窗口列表失败');
+    });
+
+    await ctx.reply(response);
+  }
+
+  /**
+   * 处理截图请求
+   */
+  private async handleScreenshotRequest(ctx: Context): Promise<void> {
+    await ctx.reply('📸 正在截图...');
+
+    const screenshotPath = await this.withRetry(async () => {
+      const res = await fetch('http://localhost:3200/api/screenshot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.error || '截图失败');
+      }
+      return data.result.path;
+    });
+
+    await ctx.replyWithPhoto({ source: screenshotPath });
   }
 
   /**

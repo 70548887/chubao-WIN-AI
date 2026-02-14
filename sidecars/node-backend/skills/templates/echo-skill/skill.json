@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "chubao.skill.v1",
+  "id": "demo.echo-skill",
+  "name": "Echo Skill",
+  "version": "0.1.0",
+  "description": "Minimal sample skill for custom module installation",
+  "entry": "./echo-skill.mjs",
+  "toolsExport": "skillTools",
+  "enabled": true,
+  "tags": [
+    "demo",
+    "template"
+  ]
+}

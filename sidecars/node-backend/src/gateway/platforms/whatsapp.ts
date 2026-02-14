@@ -28,6 +28,10 @@ interface WhatsAppConfig {
   maxReconnectAttempts?: number;
 }
 
+interface WhatsAppRuntimeConfig extends Omit<Required<WhatsAppConfig>, 'puppeteerArgs'> {
+  puppeteerArgs: string[];
+}
+
 interface RetryOptions {
   maxRetries?: number;
   baseDelay?: number;
@@ -40,7 +44,7 @@ let LocalAuth: any;
 let MessageMedia: any;
 
 export class WhatsAppIntegration extends EventEmitter {
-  private config: Required<WhatsAppConfig>;
+  private config: WhatsAppRuntimeConfig;
   private agentRuntime: AgentRuntime;
   private client: any = null;
   private ready: boolean = false;
@@ -60,6 +64,12 @@ export class WhatsAppIntegration extends EventEmitter {
     this.config = {
       sessionName: 'chubao-ai',
       dataPath: './whatsapp-session',
+      puppeteerArgs: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+      ],
       headless: true,
       qrTimeout: 60000, // 60 秒扫码超时
       reconnectInterval: 5000,
@@ -169,12 +179,7 @@ export class WhatsAppIntegration extends EventEmitter {
         }),
         puppeteer: {
           headless: this.config.headless,
-          args: this.config.puppeteerArgs || [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-gpu',
-          ],
+          args: this.config.puppeteerArgs,
         },
       });
 

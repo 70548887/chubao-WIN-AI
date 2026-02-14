@@ -128,14 +128,39 @@ if (-not $ProjectRoot) {
 
 $tauriMainPath = Join-Path $ProjectRoot "src-tauri\src\main.rs"
 $frontendAppPath = Join-Path $ProjectRoot "src\App.tsx"
+$frontendPanelsPath = Join-Path $ProjectRoot "src\\components\\SettingsPanel.tsx"
+$frontendCompareHookPath = Join-Path $ProjectRoot "src\components\settings\useDiagnosticsCompare.ts"
+$frontendCodingHookPath = Join-Path $ProjectRoot "src\components\settings\useCodingProgress.ts"
+$frontendDiagnosticsExportHookPath = Join-Path $ProjectRoot "src\components\settings\useDiagnosticsExport.ts"
+$frontendAppHealthMetaHookPath = Join-Path $ProjectRoot "src\components\settings\useAppHealthMeta.ts"
+$frontendServiceIssueViewHookPath = Join-Path $ProjectRoot "src\components\settings\useServiceIssueView.ts"
+$frontendSidecarServicesHookPath = Join-Path $ProjectRoot "src\components\settings\useSidecarServices.ts"
+$frontendDiagnosticsExportUtilsPath = Join-Path $ProjectRoot "src\components\settings\diagnosticsExportUtils.ts"
+$frontendCodingSectionPath = Join-Path $ProjectRoot "src\components\settings\CodingProgressSection.tsx"
+$frontendCompareSectionPath = Join-Path $ProjectRoot "src\components\settings\DiagnosticsCompareSection.tsx"
+$frontendCompareUtilsPath = Join-Path $ProjectRoot "src\components\settings\diagnosticsCompareUtils.ts"
+$frontendServiceStatusSectionPath = Join-Path $ProjectRoot "src\components\settings\ServiceStatusSection.tsx"
+$frontendServiceLogsSectionPath = Join-Path $ProjectRoot "src\components\settings\ServiceLogsSection.tsx"
+$frontendStatusRowPath = Join-Path $ProjectRoot "src\components\ServiceStatusRow.tsx"
+$frontendServiceTypesPath = Join-Path $ProjectRoot "src\components\settings\serviceTypes.ts"
 $rootPackagePath = Join-Path $ProjectRoot "package.json"
 $startScriptPath = Join-Path $ProjectRoot "scripts\start.ps1"
 $ocrSetupScriptPath = Join-Path $ProjectRoot "scripts\setup-ocr.ps1"
+$contractDocPath = Join-Path $ProjectRoot "docs\SIDECAR_STATUS_CONTRACT.md"
 $nodeBackendPath = Join-Path $ProjectRoot "sidecars\node-backend\src\index.ts"
+$multiAgentRoutesPath = Join-Path $ProjectRoot "sidecars\node-backend\src\routes\multiAgent.ts"
 $nodeBackendPackagePath = Join-Path $ProjectRoot "sidecars\node-backend\package.json"
 $nodeDevGuardPath = Join-Path $ProjectRoot "sidecars\node-backend\scripts\dev-with-port-guard.mjs"
 $runtimePath = Join-Path $ProjectRoot "sidecars\node-backend\src\agent\runtime.ts"
+$runtimeSecurityPath = Join-Path $ProjectRoot "sidecars\node-backend\src\agent\security.ts"
 $toolsPath = Join-Path $ProjectRoot "sidecars\node-backend\src\tools\index.ts"
+$opencodeToolsPath = Join-Path $ProjectRoot "sidecars\node-backend\src\tools\opencode.ts"
+$ohmyOpencodeToolsPath = Join-Path $ProjectRoot "sidecars\node-backend\src\tools\ohmyopencode.ts"
+$multiAgentCoordinatorPath = Join-Path $ProjectRoot "sidecars\node-backend\src\tools\multiAgentCoordinator.ts"
+$skillRegistryPath = Join-Path $ProjectRoot "sidecars\node-backend\src\tools\skillRegistry.ts"
+$skillInstallCliPath = Join-Path $ProjectRoot "sidecars\node-backend\src\tools\installSkillCli.ts"
+$skillTemplateManifestPath = Join-Path $ProjectRoot "sidecars\node-backend\skills\templates\echo-skill\skill.json"
+$skillTemplateModulePath = Join-Path $ProjectRoot "sidecars\node-backend\skills\templates\echo-skill\echo-skill.mjs"
 
 Write-Host "=========================================" -ForegroundColor Cyan
 Write-Host "  chubao-WIN-AI Smoke Test" -ForegroundColor Cyan
@@ -207,6 +232,54 @@ if (-not $StaticOnly) {
         Add-Failure "Node /api/coding/progress unreachable: $($_.Exception.Message)"
     }
 
+    # 4.2) Node tools + sandbox status
+    try {
+        $toolsStatus = Invoke-Json -Method "GET" -Url "http://127.0.0.1:$NodePort/api/tools"
+        if (
+            $toolsStatus.success -eq $true `
+            -and $null -ne $toolsStatus.tools `
+            -and $toolsStatus.sandbox `
+            -and $toolsStatus.sandbox.mode `
+            -and $toolsStatus.security `
+            -and $toolsStatus.security.mode `
+            -and $toolsStatus.cli `
+            -and $toolsStatus.cli.summary `
+            -and $toolsStatus.cli.tools `
+            -and $toolsStatus.cli.tools.opencode `
+            -and $toolsStatus.cli.tools.ohMyOpencode
+        ) {
+            Add-Pass "Node /api/tools contract ok"
+        } else {
+            Add-Failure "Node /api/tools missing required fields"
+        }
+    } catch {
+        Add-Failure "Node /api/tools unreachable: $($_.Exception.Message)"
+    }
+
+    # 4.3) Node multi-agent start INVALID_ARGUMENT contract
+    try {
+        $multiAgentInvalid = Invoke-JsonWithStatus -Method "POST" -Url "http://127.0.0.1:$NodePort/api/multi-agent/start" -Body @{}
+        if ($multiAgentInvalid.StatusCode -eq 400 -and $multiAgentInvalid.Body.errorCode -eq "INVALID_ARGUMENT") {
+            Add-Pass "Node /api/multi-agent/start invalid argument contract ok"
+        } else {
+            Add-Failure "Node /api/multi-agent/start invalid argument contract failed (status=$($multiAgentInvalid.StatusCode), errorCode=$($multiAgentInvalid.Body.errorCode))"
+        }
+    } catch {
+        Add-Failure "Node /api/multi-agent/start invalid argument test failed: $($_.Exception.Message)"
+    }
+
+    # 4.4) Node multi-agent groups status contract
+    try {
+        $multiAgentGroups = Invoke-Json -Method "GET" -Url "http://127.0.0.1:$NodePort/api/multi-agent/groups"
+        if ($multiAgentGroups.success -eq $true -and $null -ne $multiAgentGroups.groups) {
+            Add-Pass "Node /api/multi-agent/groups contract ok"
+        } else {
+            Add-Failure "Node /api/multi-agent/groups missing required fields"
+        }
+    } catch {
+        Add-Failure "Node /api/multi-agent/groups unreachable: $($_.Exception.Message)"
+    }
+
     # 5) Python INVALID_ARGUMENT contract
     try {
         $pyInvalid = Invoke-JsonWithStatus -Method "POST" -Url "http://127.0.0.1:$PythonPort/api/window/controls" -Body @{}
@@ -217,6 +290,54 @@ if (-not $StaticOnly) {
         }
     } catch {
         Add-Failure "Python invalid argument test failed: $($_.Exception.Message)"
+    }
+
+    # 5.1) Python hotkey INVALID_ARGUMENT contract
+    try {
+        $pyHotkeyInvalid = Invoke-JsonWithStatus -Method "POST" -Url "http://127.0.0.1:$PythonPort/api/hotkey" -Body @{}
+        if ($pyHotkeyInvalid.StatusCode -eq 400 -and $pyHotkeyInvalid.Body.errorCode -eq "INVALID_ARGUMENT") {
+            Add-Pass "Python /api/hotkey invalid argument contract ok"
+        } else {
+            Add-Failure "Python /api/hotkey invalid argument contract failed (status=$($pyHotkeyInvalid.StatusCode), errorCode=$($pyHotkeyInvalid.Body.errorCode))"
+        }
+    } catch {
+        Add-Failure "Python /api/hotkey invalid argument test failed: $($_.Exception.Message)"
+    }
+
+    # 5.2) Python browser navigate INVALID_ARGUMENT contract
+    try {
+        $pyBrowserNavigateInvalid = Invoke-JsonWithStatus -Method "POST" -Url "http://127.0.0.1:$PythonPort/api/browser/navigate" -Body @{}
+        if ($pyBrowserNavigateInvalid.StatusCode -eq 400 -and $pyBrowserNavigateInvalid.Body.errorCode -eq "INVALID_ARGUMENT") {
+            Add-Pass "Python /api/browser/navigate invalid argument contract ok"
+        } else {
+            Add-Failure "Python /api/browser/navigate invalid argument contract failed (status=$($pyBrowserNavigateInvalid.StatusCode), errorCode=$($pyBrowserNavigateInvalid.Body.errorCode))"
+        }
+    } catch {
+        Add-Failure "Python /api/browser/navigate invalid argument test failed: $($_.Exception.Message)"
+    }
+
+    # 5.3) Python browser click INVALID_ARGUMENT contract
+    try {
+        $pyBrowserClickInvalid = Invoke-JsonWithStatus -Method "POST" -Url "http://127.0.0.1:$PythonPort/api/browser/click" -Body @{}
+        if ($pyBrowserClickInvalid.StatusCode -eq 400 -and $pyBrowserClickInvalid.Body.errorCode -eq "INVALID_ARGUMENT") {
+            Add-Pass "Python /api/browser/click invalid argument contract ok"
+        } else {
+            Add-Failure "Python /api/browser/click invalid argument contract failed (status=$($pyBrowserClickInvalid.StatusCode), errorCode=$($pyBrowserClickInvalid.Body.errorCode))"
+        }
+    } catch {
+        Add-Failure "Python /api/browser/click invalid argument test failed: $($_.Exception.Message)"
+    }
+
+    # 5.4) Python browser form_input INVALID_ARGUMENT contract
+    try {
+        $pyBrowserFormInputInvalid = Invoke-JsonWithStatus -Method "POST" -Url "http://127.0.0.1:$PythonPort/api/browser/form_input" -Body @{}
+        if ($pyBrowserFormInputInvalid.StatusCode -eq 400 -and $pyBrowserFormInputInvalid.Body.errorCode -eq "INVALID_ARGUMENT") {
+            Add-Pass "Python /api/browser/form_input invalid argument contract ok"
+        } else {
+            Add-Failure "Python /api/browser/form_input invalid argument contract failed (status=$($pyBrowserFormInputInvalid.StatusCode), errorCode=$($pyBrowserFormInputInvalid.Body.errorCode))"
+        }
+    } catch {
+        Add-Failure "Python /api/browser/form_input invalid argument test failed: $($_.Exception.Message)"
     }
 
     # 6) Python windows list endpoint
@@ -281,6 +402,7 @@ try {
         'fn restart_sidecar',
         'fn sidecar_logs',
         'fn sidecar_diagnostics',
+        'fn sidecar_port_inspect',
         'fn snapshot_status',
         'managed: bool',
         'let running = managed || healthy;',
@@ -324,6 +446,32 @@ try {
     Add-Failure "Rust behavior contract check failed: $($_.Exception.Message)"
 }
 
+# 7.2) Contract doc alignment (static)
+try {
+    $docChecks = @(
+        'pythonOcrSummary',
+        'portConflictSummary',
+        'engineInitialized',
+        'diagnostics.v1.2',
+        'diagnostics.v1.1'
+    )
+
+    $missingDoc = @()
+    foreach ($p in $docChecks) {
+        if (-not (Assert-FileContains -FilePath $contractDocPath -Pattern $p)) {
+            $missingDoc += $p
+        }
+    }
+
+    if ($missingDoc.Count -eq 0) {
+        Add-Pass "Contract doc includes OCR/port export summary fields"
+    } else {
+        Add-Failure "Contract doc missing OCR/port export fields: $($missingDoc -join ', ')"
+    }
+} catch {
+    Add-Failure "Contract doc check failed: $($_.Exception.Message)"
+}
+
 # 8) Tauri command usage (Frontend side, static)
 try {
     $frontendChecks = @(
@@ -348,6 +496,10 @@ try {
         'copyDiagnosticsSummary',
         'coerceDiagnosticsPayload',
         'buildDiagnosticsDiff',
+        'portInspectBusy',
+        'portInspections',
+        'onInspectPort',
+        'status-port-inspect',
         'runDiagnosticsCompare',
         'buildCurrentDiffPayload',
         'buildCompareDiffText',
@@ -395,8 +547,17 @@ try {
         'className="coding-progress-panel"',
         'className="coding-progress-files"',
         "invoke<AppHealthPayload>('health')",
-        'schemaVersion: ''diagnostics.v1.1''',
+        'schemaVersion: DIAGNOSTICS_EXPORT_SCHEMA_CURRENT',
+        'const DIAGNOSTICS_EXPORT_SCHEMA_CURRENT = ''diagnostics.v1.2''',
+        'const DIAGNOSTICS_EXPORT_SCHEMA_COMPAT = [',
+        '''diagnostics.v1.1''',
         'appVersion:',
+        'pythonOcrSummary:',
+        'portConflictSummary:',
+        'buildPortConflictServiceSummary(',
+        'comparePortConflictSummary(',
+        'getCompareLineClass(',
+        "invoke<SidecarPortInspectionPayload>('sidecar_port_inspect'",
         'redactSensitiveData(',
         "invoke<SidecarStatusResponse>('restart_sidecar'",
         "invoke<SidecarLogsResponse>('sidecar_logs'",
@@ -405,7 +566,23 @@ try {
 
     $missingFrontend = @()
     foreach ($p in $frontendChecks) {
-        if (-not (Assert-FileContains -FilePath $frontendAppPath -Pattern $p)) {
+        $foundInApp = Assert-FileContains -FilePath $frontendAppPath -Pattern $p
+        $foundInPanels = Assert-FileContains -FilePath $frontendPanelsPath -Pattern $p
+        $foundInCompareHook = Assert-FileContains -FilePath $frontendCompareHookPath -Pattern $p
+        $foundInCodingHook = Assert-FileContains -FilePath $frontendCodingHookPath -Pattern $p
+        $foundInDiagnosticsExportHook = Assert-FileContains -FilePath $frontendDiagnosticsExportHookPath -Pattern $p
+        $foundInAppHealthMetaHook = Assert-FileContains -FilePath $frontendAppHealthMetaHookPath -Pattern $p
+        $foundInServiceIssueViewHook = Assert-FileContains -FilePath $frontendServiceIssueViewHookPath -Pattern $p
+        $foundInSidecarServicesHook = Assert-FileContains -FilePath $frontendSidecarServicesHookPath -Pattern $p
+        $foundInDiagnosticsExportUtils = Assert-FileContains -FilePath $frontendDiagnosticsExportUtilsPath -Pattern $p
+        $foundInCodingSection = Assert-FileContains -FilePath $frontendCodingSectionPath -Pattern $p
+        $foundInCompareSection = Assert-FileContains -FilePath $frontendCompareSectionPath -Pattern $p
+        $foundInCompareUtils = Assert-FileContains -FilePath $frontendCompareUtilsPath -Pattern $p
+        $foundInServiceStatusSection = Assert-FileContains -FilePath $frontendServiceStatusSectionPath -Pattern $p
+        $foundInServiceLogsSection = Assert-FileContains -FilePath $frontendServiceLogsSectionPath -Pattern $p
+        $foundInStatusRow = Assert-FileContains -FilePath $frontendStatusRowPath -Pattern $p
+        $foundInServiceTypes = Assert-FileContains -FilePath $frontendServiceTypesPath -Pattern $p
+        if (-not ($foundInApp -or $foundInPanels -or $foundInCompareHook -or $foundInCodingHook -or $foundInDiagnosticsExportHook -or $foundInAppHealthMetaHook -or $foundInServiceIssueViewHook -or $foundInSidecarServicesHook -or $foundInDiagnosticsExportUtils -or $foundInCodingSection -or $foundInCompareSection -or $foundInCompareUtils -or $foundInServiceStatusSection -or $foundInServiceLogsSection -or $foundInStatusRow -or $foundInServiceTypes)) {
             $missingFrontend += $p
         }
     }
@@ -447,6 +624,20 @@ try {
         Add-Pass "Launcher port conflict safeguards present"
     } else {
         Add-Failure "Launcher safeguards missing: $($missingLauncher -join ', ')"
+    }
+
+    $tauriPortGuardPattern = '"tauri"\s*\{.*?Prepare-PortForStartup\s+-ServiceName\s+"Python Automation"\s+-Port\s+\$pythonPort.*?Prepare-PortForStartup\s+-ServiceName\s+"Node\.js Backend"\s+-Port\s+\$nodePort'
+    if (Assert-FileRegex -FilePath $startScriptPath -Pattern $tauriPortGuardPattern) {
+        Add-Pass "Launcher tauri mode port pre-cleanup present"
+    } else {
+        Add-Failure "Launcher tauri mode missing sidecar port pre-cleanup"
+    }
+
+    $allPortGuardPattern = '"all"\s*\{.*?Prepare-PortForStartup\s+-ServiceName\s+"Python Automation"\s+-Port\s+\$pythonPort.*?Prepare-PortForStartup\s+-ServiceName\s+"Node\.js Backend"\s+-Port\s+\$nodePort'
+    if (Assert-FileRegex -FilePath $startScriptPath -Pattern $allPortGuardPattern) {
+        Add-Pass "Launcher all mode port pre-cleanup present"
+    } else {
+        Add-Failure "Launcher all mode missing sidecar port pre-cleanup"
     }
 } catch {
     Add-Failure "Launcher safeguards check failed: $($_.Exception.Message)"
@@ -490,12 +681,30 @@ try {
         'Port ${PORT} is already in use.',
         "server.on('error', onListenError)",
         "app.get('/api/coding/progress'",
-        'analyzeCodingProgress({'
+        "app.get('/api/tools'",
+        "app.post('/api/multi-agent/start'",
+        "app.get('/api/multi-agent/groups'",
+        "app.get('/api/multi-agent/groups/:groupId'",
+        "app.post('/api/multi-agent/groups/:groupId/cancel'",
+        'registerMultiAgentRoutes({',
+        "'NOT_FOUND'",
+        'statusCodeForErrorCode',
+        'analyzeCodingProgress({',
+        'getSandboxPolicy()',
+        'security: agentRuntime.getSecurityPolicy()',
+        'const cli = await toolManager.getCliHealth();',
+        'cli,',
+        "'FORBIDDEN'",
+        "app.get('/api/skills'",
+        "app.post('/api/skills/install'",
+        'await toolManager.initializeSkills();'
     )
 
     $missingNodePort = @()
     foreach ($p in $nodePortChecks) {
-        if (-not (Assert-FileContains -FilePath $nodeBackendPath -Pattern $p)) {
+        $inNodeBackend = Assert-FileContains -FilePath $nodeBackendPath -Pattern $p
+        $inMultiAgentRoutes = Assert-FileContains -FilePath $multiAgentRoutesPath -Pattern $p
+        if (-not ($inNodeBackend -or $inMultiAgentRoutes)) {
             $missingNodePort += $p
         }
     }
@@ -542,12 +751,120 @@ try {
         "name: 'get_coding_progress'",
         'codingProgressTool',
         'analyzeCodingProgress(args)',
-        'Array.from(this.tools.values()).map('
+        'CHUBAO_TOOL_SANDBOX_MODE',
+        'CHUBAO_ALLOWED_TOOLS',
+        'CHUBAO_BLOCKED_TOOLS',
+        'getSandboxPolicy(): ToolSandboxPolicy',
+        'not allowed by sandbox policy',
+        'this.getAllTools().map(',
+        'loadSkillToolsFromRegistry',
+        'installSkillFromPath',
+        'initializeSkills(): Promise<void>',
+        'installSkill(skillPath: string)',
+        'getInstalledSkills(): InstalledSkillManifest[]',
+        'getSkillWarnings(): string[]',
+        "name: 'right_click'",
+        "name: 'double_click'",
+        "name: 'hover'",
+        "name: 'drag'",
+        "name: 'browser_launch'",
+        "name: 'browser_navigate'",
+        "name: 'browser_click'",
+        "name: 'browser_type'",
+        "name: 'browser_read_page'",
+        "name: 'browser_get_text'",
+        "name: 'browser_form_input'",
+        "name: 'browser_press'",
+        "name: 'browser_scroll'",
+        "name: 'browser_screenshot'",
+        "name: 'browser_close'",
+        "name: 'opencode_run'",
+        "name: 'opencode_create_project'",
+        "name: 'opencode_check_status'",
+        "name: 'opencode_list_tasks'",
+        "name: 'opencode_check_concurrent_status'",
+        "name: 'opencode_cancel_task'",
+        "name: 'ohmyopencode_task'",
+        "name: 'ohmyopencode_delegate'",
+        "name: 'ohmyopencode_list_agents'",
+        "name: 'ohmyopencode_check_concurrent_status'",
+        "name: 'ohmyopencode_cancel_task'",
+        "name: 'multi_agent_start'",
+        "name: 'multi_agent_group_status'",
+        "name: 'multi_agent_group_cancel'",
+        "name: 'multi_agent_group_list'",
+        'opencodeRunTool',
+        'opencodeCreateProjectTool',
+        'opencodeCheckStatusTool',
+        'opencodeCancelTaskTool',
+        'ohmyOpencodeTaskTool',
+        'ohmyOpencodeDelegateTool',
+        'ohmyOpencodeListAgentsTool',
+        'ohmyOpencodeCheckConcurrentStatusTool',
+        'ohmyOpencodeCancelTaskTool',
+        'multiAgentStartTool',
+        'multiAgentStatusTool',
+        'multiAgentCancelTool',
+        'multiAgentListTool',
+        "from './opencode.js'",
+        "from './ohmyopencode.js'",
+        "from './multiAgentCoordinator.js'",
+        'startMultiAgentGroup',
+        'getMultiAgentGroupStatus',
+        'cancelMultiAgentGroup',
+        'listMultiAgentGroups',
+        'CHUBAO_OHMYOPENCODE_BIN',
+        'CHUBAO_OPENCODE_TASK_STATE_ENABLED',
+        'CHUBAO_OPENCODE_TASK_STATE_PATH',
+        'CHUBAO_OPENCODE_TASK_RETENTION_MS',
+        'CHUBAO_OPENCODE_MAX_TASKS',
+        'CHUBAO_OHMY_TASK_STATE_ENABLED',
+        'CHUBAO_OHMY_TASK_STATE_PATH',
+        'CHUBAO_MULTI_AGENT_GROUP_STATE_ENABLED',
+        'CHUBAO_MULTI_AGENT_GROUP_STATE_PATH',
+        'CHUBAO_MULTI_AGENT_MAX_RUNNING_GROUPS',
+        'CHUBAO_MULTI_AGENT_MAX_RUNNING_TASKS',
+        'multi-agent service unavailable',
+        'running group limit reached',
+        'running task limit reached',
+        'persistOhMyTasks',
+        'loadPersistedTasksIfNeeded',
+        'persistOpenCodeTasks',
+        'loadPersistedOpenCodeTasksIfNeeded',
+        'opencode-tasks.v1',
+        'persistMultiAgentGroups',
+        'loadPersistedGroupsIfNeeded',
+        'ohmy-tasks.v1',
+        'multi-agent-groups.v1',
+        '/api/right_click',
+        '/api/double_click',
+        '/api/hover',
+        '/api/drag',
+        '/api/browser/launch',
+        '/api/browser/navigate',
+        '/api/browser/click',
+        '/api/browser/type',
+        '/api/browser/read_page',
+        '/api/browser/get_text',
+        '/api/browser/form_input',
+        '/api/browser/press',
+        '/api/browser/scroll',
+        '/api/browser/screenshot',
+        '/api/browser/close',
+        'base64: data.result.base64',
+        'mediaType: data.result.media_type',
+        'probeOpenCodeCli',
+        'probeOhMyCli',
+        'getCliHealth(): Promise<CliHealthSnapshot>'
     )
 
     $missingTools = @()
     foreach ($p in $toolChecks) {
-        if (-not (Assert-FileContains -FilePath $toolsPath -Pattern $p)) {
+        $inToolIndex = Assert-FileContains -FilePath $toolsPath -Pattern $p
+        $inOpenCodeTools = Assert-FileContains -FilePath $opencodeToolsPath -Pattern $p
+        $inOhMyOpenCodeTools = Assert-FileContains -FilePath $ohmyOpencodeToolsPath -Pattern $p
+        $inMultiAgentCoordinator = Assert-FileContains -FilePath $multiAgentCoordinatorPath -Pattern $p
+        if (-not ($inToolIndex -or $inOpenCodeTools -or $inOhMyOpenCodeTools -or $inMultiAgentCoordinator)) {
             $missingTools += $p
         }
     }
@@ -562,10 +879,84 @@ try {
 }
 
 try {
+    $skillChecks = @(
+        'CHUBAO_SKILLS_DIR',
+        'chubao.skill.v1',
+        'loadSkillToolsFromRegistry',
+        'installSkillFromPath',
+        'skill:install',
+        'npm run skill:install -- ./skills/templates/echo-skill',
+        'demo.echo-skill',
+        'echo_text'
+    )
+
+    $missingSkills = @()
+    foreach ($p in $skillChecks) {
+        $inRegistry = Assert-FileContains -FilePath $skillRegistryPath -Pattern $p
+        $inCli = Assert-FileContains -FilePath $skillInstallCliPath -Pattern $p
+        $inNodePkg = Assert-FileContains -FilePath $nodeBackendPackagePath -Pattern $p
+        $inTemplateManifest = Assert-FileContains -FilePath $skillTemplateManifestPath -Pattern $p
+        $inTemplateModule = Assert-FileContains -FilePath $skillTemplateModulePath -Pattern $p
+        if (-not ($inRegistry -or $inCli -or $inNodePkg -or $inTemplateManifest -or $inTemplateModule)) {
+            $missingSkills += $p
+        }
+    }
+
+    if ($missingSkills.Count -eq 0) {
+        Add-Pass "Skill module install/registry wiring present"
+    } else {
+        Add-Failure "Skill module wiring missing: $($missingSkills -join ', ')"
+    }
+} catch {
+    Add-Failure "Skill module wiring check failed: $($_.Exception.Message)"
+}
+
+try {
+    $runtimeSecurityChecks = @(
+        "export type SecurityMode = 'off' | 'warn' | 'enforce'",
+        "export class ToolSecurityGuard",
+        'CHUBAO_SECURITY_MODE',
+        'CHUBAO_SECURITY_ALLOW_HIGH_RISK',
+        'CHUBAO_SECURITY_ALLOWED_TOOLS',
+        'CHUBAO_SECURITY_BLOCKED_TOOLS',
+        'CHUBAO_SECURITY_BLOCKED_ARG_PATTERNS',
+        'high-risk tool requires CHUBAO_SECURITY_ALLOW_HIGH_RISK=true',
+        'path traversal is not allowed',
+        'url protocol not allowed'
+    )
+
+    $missingRuntimeSecurity = @()
+    foreach ($p in $runtimeSecurityChecks) {
+        if (-not (Assert-FileContains -FilePath $runtimeSecurityPath -Pattern $p)) {
+            $missingRuntimeSecurity += $p
+        }
+    }
+
+    if ($missingRuntimeSecurity.Count -eq 0) {
+        Add-Pass "Agent runtime security guard contract present"
+    } else {
+        Add-Failure "Agent runtime security guard missing: $($missingRuntimeSecurity -join ', ')"
+    }
+} catch {
+    Add-Failure "Agent runtime security guard check failed: $($_.Exception.Message)"
+}
+
+try {
     $runtimeChecks = @(
-        "'get_coding_progress'",
-        'Coding progress (',
-        'ahead/behind'
+        "response.stop_reason !== 'tool_use'",
+        "type: 'tool_result'",
+        "type: 'image'",
+        'media_type: mediaType',
+        'tool_use_id: toolUse.id',
+        'content: toolResultBlocks',
+        'buildToolResultContent(toolUse.name, modelResult)',
+        'adaptToolArgsForExecution(toolUse.name, safeInput)',
+        'adaptToolResultForModel(toolUse.name, result)',
+        'extractTextFromBlocks(response.content)',
+        'ToolSecurityGuard',
+        'getSecurityPolicy(): ToolSecurityPolicy',
+        'this.securityGuard.evaluate(',
+        'blocked by security policy'
     )
 
     $missingRuntime = @()
@@ -576,12 +967,12 @@ try {
     }
 
     if ($missingRuntime.Count -eq 0) {
-        Add-Pass "Agent runtime coding progress integration present"
+        Add-Pass "Agent runtime multi-turn tool loop contract present"
     } else {
-        Add-Failure "Agent runtime integration missing: $($missingRuntime -join ', ')"
+        Add-Failure "Agent runtime multi-turn loop contract missing: $($missingRuntime -join ', ')"
     }
 } catch {
-    Add-Failure "Agent runtime integration check failed: $($_.Exception.Message)"
+    Add-Failure "Agent runtime multi-turn loop check failed: $($_.Exception.Message)"
 }
 
 Write-Host ""

@@ -31,6 +31,78 @@ function resolvePort() {
 }
 
 async function listPortOccupantsWindows(port) {
+  const netstatItems = await listPortOccupantsWindowsViaNetstat(port);
+  if (netstatItems.length > 0) {
+    return netstatItems;
+  }
+
+  try {
+    return await listPortOccupantsWindowsViaPowerShell(port);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[port-guard] PowerShell occupant probe failed, fallback to netstat-only mode: ${message}`);
+    return netstatItems;
+  }
+}
+
+async function listPortOccupantsWindowsViaNetstat(port) {
+  const { stdout } = await execFileAsync('netstat', ['-ano', '-p', 'tcp'], { windowsHide: true });
+  const lines = stdout.split(/\r?\n/);
+  const pidSet = new Set();
+  const portSuffix = `:${port}`;
+
+  for (const line of lines) {
+    if (!line.includes('LISTENING')) {
+      continue;
+    }
+    if (!line.includes(portSuffix)) {
+      continue;
+    }
+
+    const parts = line.trim().split(/\s+/);
+    const pid = Number(parts[parts.length - 1]);
+    if (Number.isFinite(pid) && pid > 0) {
+      pidSet.add(pid);
+    }
+  }
+
+  if (pidSet.size === 0) {
+    return [];
+  }
+
+  const { stdout: taskListText } = await execFileAsync('tasklist', ['/FO', 'CSV', '/NH'], {
+    windowsHide: true,
+    maxBuffer: 8 * 1024 * 1024,
+  });
+  const pidToName = new Map();
+  const csvLines = taskListText.split(/\r?\n/).filter((line) => line.trim().length > 0);
+  for (const line of csvLines) {
+    const cleaned = line.replace(/^"|"$/g, '');
+    const cols = cleaned.split('","');
+    if (cols.length < 2) {
+      continue;
+    }
+
+    const imageName = cols[0] || '';
+    const pid = Number(cols[1]);
+    if (!Number.isFinite(pid) || pid <= 0) {
+      continue;
+    }
+
+    const normalized = imageName.toLowerCase().endsWith('.exe')
+      ? imageName.slice(0, -4)
+      : imageName;
+    pidToName.set(pid, normalized);
+  }
+
+  return Array.from(pidSet.values()).map((pid) => ({
+    pid,
+    name: pidToName.get(pid) || '',
+  }));
+}
+
+async function listPortOccupantsWindowsViaPowerShell(port) {
+  // Keep this path for compatibility fallback and static contract checks.
   const script = [
     `$items = @(Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue |`,
     '  Select-Object -ExpandProperty OwningProcess -Unique |',

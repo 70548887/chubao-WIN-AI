@@ -11,7 +11,9 @@ import { config } from 'dotenv';
 import { AgentRuntime } from './agent/runtime.js';
 import { MemoryManager } from './memory/manager.js';
 import { analyzeCodingProgress } from './coding/progress.js';
+import { toolManager } from './tools/index.js';
 import { GatewayServer } from './gateway/server.js';
+import { registerMultiAgentRoutes } from './routes/multiAgent.js';
 import {
   LarkIntegration,
   TelegramIntegration,
@@ -24,6 +26,8 @@ type HealthState = 'ok' | 'degraded' | 'error';
 type DependencyState = HealthState | 'disabled';
 type ErrorCode =
   | 'INVALID_ARGUMENT'
+  | 'FORBIDDEN'
+  | 'NOT_FOUND'
   | 'SERVICE_UNAVAILABLE'
   | 'DEPENDENCY_UNAVAILABLE'
   | 'TIMEOUT'
@@ -58,6 +62,15 @@ function inferErrorCode(error: unknown): ErrorCode {
   }
 
   const message = getErrorMessage(error).toLowerCase();
+  if (message.includes('not allowed by sandbox policy')) {
+    return 'FORBIDDEN';
+  }
+  if (message.includes('blocked by security policy')) {
+    return 'FORBIDDEN';
+  }
+  if (message.includes('not found')) {
+    return 'NOT_FOUND';
+  }
   if (message.includes('timeout')) {
     return 'TIMEOUT';
   }
@@ -140,6 +153,12 @@ async function main() {
   const memoryManager = new MemoryManager();
   await memoryManager.init();
   dependencies.memory = 'ok';
+
+  try {
+    await toolManager.initializeSkills();
+  } catch (error) {
+    console.warn('Skill tools initialize warning:', getErrorMessage(error));
+  }
 
   const agentRuntime = new AgentRuntime(memoryManager);
   new GatewayServer(wss, agentRuntime);
@@ -320,6 +339,76 @@ async function main() {
       res.json({
         success: true,
         progress,
+      });
+    } catch (error) {
+      sendError(res, 500, inferErrorCode(error), getErrorMessage(error));
+    }
+  });
+
+  app.get('/api/tools', async (_req, res) => {
+    try {
+      await toolManager.initializeSkills();
+      const cli = await toolManager.getCliHealth();
+      res.json({
+        success: true,
+        tools: agentRuntime.getAvailableTools(),
+        sandbox: toolManager.getSandboxPolicy(),
+        security: agentRuntime.getSecurityPolicy(),
+        cli,
+      });
+    } catch (error) {
+      sendError(res, 500, inferErrorCode(error), getErrorMessage(error));
+    }
+  });
+
+  registerMultiAgentRoutes({
+    app,
+    initializeSkills: () => toolManager.initializeSkills(),
+    executeTool: async (name, args) => agentRuntime.executeTool(name, args),
+    inferErrorCode,
+    sendError,
+  });
+
+  app.get('/api/skills', async (_req, res) => {
+    try {
+      await toolManager.initializeSkills();
+      const skills = toolManager.getInstalledSkills().map((skill) => ({
+        id: skill.id,
+        name: skill.name,
+        version: skill.version,
+        enabled: skill.enabled,
+        description: skill.description,
+        tags: skill.tags,
+        source: skill.source,
+        installedAt: skill.installedAt,
+      }));
+      res.json({
+        success: true,
+        skills,
+        warnings: toolManager.getSkillWarnings(),
+        toolCount: toolManager.getAllTools().length,
+      });
+    } catch (error) {
+      sendError(res, 500, inferErrorCode(error), getErrorMessage(error));
+    }
+  });
+
+  app.post('/api/skills/install', async (req, res) => {
+    const skillPath = req.body?.path;
+    if (typeof skillPath !== 'string' || skillPath.trim().length === 0) {
+      sendError(res, 400, 'INVALID_ARGUMENT', 'path is required', {
+        field: 'path',
+      });
+      return;
+    }
+
+    try {
+      const result = await toolManager.installSkill(skillPath);
+      res.json({
+        success: true,
+        skill: result.manifest,
+        loadedTools: result.loadedTools,
+        warnings: result.warnings,
       });
     } catch (error) {
       sendError(res, 500, inferErrorCode(error), getErrorMessage(error));

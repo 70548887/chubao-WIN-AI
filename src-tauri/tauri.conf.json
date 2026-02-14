@@ -45,24 +45,11 @@
         "displayLanguageSelector": true
       }
     },
-    "externalBin": [
-      "sidecars/node-backend/node-backend",
-      "sidecars/python-automation/python-automation"
-    ]
+    "externalBin": []
   },
   "plugins": {
     "shell": {
-      "sidecar": true,
-      "scope": [
-        {
-          "name": "node-backend",
-          "sidecar": true
-        },
-        {
-          "name": "python-automation",
-          "sidecar": true
-        }
-      ]
+      "open": true
     }
   }
 }

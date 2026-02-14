@@ -50,6 +50,7 @@ struct ServiceDiagnosticsPayload {
     status: ServiceStatusPayload,
     health: Option<Value>,
     health_error: Option<String>,
+    port_inspection: PortInspectionPayload,
 }
 
 #[derive(Serialize, Clone)]
@@ -57,6 +58,27 @@ struct ServiceDiagnosticsPayload {
 struct SidecarDiagnosticsPayload {
     node: ServiceDiagnosticsPayload,
     python: ServiceDiagnosticsPayload,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct PortOccupantPayload {
+    pid: u32,
+    process_name: String,
+    local_address: String,
+    command_line: String,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct PortInspectionPayload {
+    service: String,
+    port: u16,
+    listening: bool,
+    managed_pid: Option<u32>,
+    has_conflict: bool,
+    occupants: Vec<PortOccupantPayload>,
+    inspected_at_ms: u128,
 }
 
 #[derive(Serialize, Clone)]
@@ -109,6 +131,13 @@ struct ManagedService {
 }
 
 impl ManagedService {
+    fn service_key(&self) -> &'static str {
+        match self.kind {
+            ServiceKind::NodeBackend => "node",
+            ServiceKind::PythonAutomation => "python",
+        }
+    }
+
     fn new(name: &'static str, kind: ServiceKind, port: u16, workdir: PathBuf) -> Self {
         Self {
             name,
@@ -337,16 +366,24 @@ impl ManagedService {
 
     fn diagnostics(&mut self) -> ServiceDiagnosticsPayload {
         let status = self.status();
+        let port_inspection = inspect_port(
+            self.service_key(),
+            status.port,
+            status.pid,
+            status.healthy,
+        );
         match http_get_json(self.port, "/health") {
             Ok(health) => ServiceDiagnosticsPayload {
                 status,
                 health: Some(health),
                 health_error: None,
+                port_inspection,
             },
             Err(err) => ServiceDiagnosticsPayload {
                 status,
                 health: None,
                 health_error: Some(err),
+                port_inspection,
             },
         }
     }
@@ -447,6 +484,34 @@ impl SidecarManager {
         })
     }
 
+    fn inspect_service_port(&mut self, service: &str) -> Result<PortInspectionPayload, String> {
+        let target = ServiceTarget::parse(service)
+            .ok_or_else(|| format!("unknown service: {}", service))?;
+
+        let inspection = match target {
+            ServiceTarget::Node => {
+                let status = self.node.status();
+                inspect_port(
+                    self.node.service_key(),
+                    status.port,
+                    status.pid,
+                    status.healthy,
+                )
+            }
+            ServiceTarget::Python => {
+                let status = self.python.status();
+                inspect_port(
+                    self.python.service_key(),
+                    status.port,
+                    status.pid,
+                    status.healthy,
+                )
+            }
+        };
+
+        Ok(inspection)
+    }
+
     fn stop_all(&mut self) {
         self.node.stop();
         self.python.stop();
@@ -512,6 +577,133 @@ fn now_millis() -> u128 {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_millis())
         .unwrap_or(0)
+}
+
+fn inspect_port(
+    service: &str,
+    port: u16,
+    managed_pid: Option<u32>,
+    healthy: bool,
+) -> PortInspectionPayload {
+    let occupants = list_port_occupants(port);
+    let listening = !occupants.is_empty();
+    let has_conflict = match managed_pid {
+        Some(pid) => occupants.iter().any(|item| item.pid != pid),
+        None => !healthy && !occupants.is_empty(),
+    };
+
+    PortInspectionPayload {
+        service: service.to_string(),
+        port,
+        listening,
+        managed_pid,
+        has_conflict,
+        occupants,
+        inspected_at_ms: now_millis(),
+    }
+}
+
+fn list_port_occupants(port: u16) -> Vec<PortOccupantPayload> {
+    #[cfg(target_os = "windows")]
+    {
+        let script = [
+            format!("$port = {}", port),
+            "$listeners = @(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue)".to_string(),
+            "if ($listeners.Count -eq 0) { Write-Output '[]'; exit 0 }".to_string(),
+            "$items = foreach ($listener in ($listeners | Sort-Object OwningProcess -Unique)) {".to_string(),
+            "  $pid = $listener.OwningProcess".to_string(),
+            "  $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue".to_string(),
+            "  $cmd = ''".to_string(),
+            "  try { $cmd = (Get-CimInstance Win32_Process -Filter \"ProcessId = $pid\" -ErrorAction SilentlyContinue).CommandLine } catch { $cmd = '' }".to_string(),
+            "  [PSCustomObject]@{".to_string(),
+            "    pid = $pid".to_string(),
+            "    processName = if ($proc) { $proc.ProcessName } else { '' }".to_string(),
+            "    localAddress = if ($listener.LocalAddress) { $listener.LocalAddress } else { '' }".to_string(),
+            "    commandLine = if ($cmd) { $cmd } else { '' }".to_string(),
+            "  }".to_string(),
+            "}".to_string(),
+            "$items | ConvertTo-Json -Compress".to_string(),
+        ]
+        .join("\n");
+
+        let output = Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-Command",
+                script.as_str(),
+            ])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .output();
+
+        match output {
+            Ok(result) if result.status.success() => parse_port_occupants_json(&result.stdout),
+            _ => Vec::new(),
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = port;
+        Vec::new()
+    }
+}
+
+fn parse_port_occupants_json(raw: &[u8]) -> Vec<PortOccupantPayload> {
+    let text = String::from_utf8_lossy(raw);
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return Vec::new();
+    }
+
+    let value: Value = match serde_json::from_str(trimmed) {
+        Ok(value) => value,
+        Err(_) => return Vec::new(),
+    };
+
+    let entries = match value {
+        Value::Array(items) => items,
+        item => vec![item],
+    };
+
+    let mut occupants = Vec::new();
+    for entry in entries {
+        let pid = entry
+            .get("pid")
+            .and_then(Value::as_u64)
+            .and_then(|value| u32::try_from(value).ok());
+        let Some(pid) = pid else {
+            continue;
+        };
+
+        let process_name = entry
+            .get("processName")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
+        let local_address = entry
+            .get("localAddress")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
+        let command_line = entry
+            .get("commandLine")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
+
+        occupants.push(PortOccupantPayload {
+            pid,
+            process_name,
+            local_address,
+            command_line,
+        });
+    }
+
+    occupants.sort_by_key(|item| item.pid);
+    occupants
 }
 
 fn push_log_line(logs: &Arc<Mutex<VecDeque<String>>>, line: String) {
@@ -663,6 +855,18 @@ fn sidecar_diagnostics(state: State<'_, AppState>) -> Result<SidecarDiagnosticsP
     Ok(manager.diagnostics())
 }
 
+#[tauri::command]
+fn sidecar_port_inspect(
+    state: State<'_, AppState>,
+    service: String,
+) -> Result<PortInspectionPayload, String> {
+    let mut manager = state
+        .sidecars
+        .lock()
+        .map_err(|_| "sidecar manager lock poisoned".to_string())?;
+    manager.inspect_service_port(&service)
+}
+
 fn main() {
     let sidecars = Arc::new(Mutex::new(SidecarManager::new(detect_project_root())));
     if let Ok(mut manager) = sidecars.lock() {
@@ -684,7 +888,8 @@ fn main() {
             ensure_sidecars,
             restart_sidecar,
             sidecar_logs,
-            sidecar_diagnostics
+            sidecar_diagnostics,
+            sidecar_port_inspect
         ])
         .run(tauri::generate_context!())
         .expect("failed to run chubao tauri app");

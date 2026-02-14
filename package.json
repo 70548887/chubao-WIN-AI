@@ -10,6 +10,9 @@
         "start:all": "powershell -ExecutionPolicy Bypass -File .\\scripts\\start.ps1 -Mode all",
         "start:server": "powershell -ExecutionPolicy Bypass -File .\\scripts\\start.ps1 -Mode server",
         "start:cli": "powershell -ExecutionPolicy Bypass -File .\\scripts\\start.ps1 -Mode cli",
+        "dev:parallel": "powershell -ExecutionPolicy Bypass -File .\\scripts\\parallel-dev.ps1",
+        "dev:parallel:gpt53": "powershell -ExecutionPolicy Bypass -File .\\scripts\\parallel-dev.ps1 -SingleModel openai/gpt-5.3-codex",
+        "dev:parallel:preview": "powershell -ExecutionPolicy Bypass -File .\\scripts\\parallel-dev.ps1 -PreviewOnly",
         "verify": "powershell -ExecutionPolicy Bypass -File .\\scripts\\start.ps1 -Mode verify",
         "verify:static": "powershell -ExecutionPolicy Bypass -File .\\scripts\\smoke.ps1 -StaticOnly",
         "setup:ocr": "powershell -ExecutionPolicy Bypass -File .\\scripts\\setup-ocr.ps1",
@@ -18,7 +21,9 @@
         "tauri:build": "tauri build",
         "smoke": "powershell -ExecutionPolicy Bypass -File .\\scripts\\smoke.ps1",
         "test:core": "vitest run src/core src/skills/coding",
-        "test:core:watch": "vitest src/core src/skills/coding"
+        "test:core:watch": "vitest src/core src/skills/coding",
+        "test:node-backend": "vitest run sidecars/node-backend/src/tools sidecars/node-backend/src/routes",
+        "test:node-backend:watch": "vitest sidecars/node-backend/src/tools sidecars/node-backend/src/routes"
     },
     "dependencies": {
         "@tauri-apps/api": "^2.0.0",
