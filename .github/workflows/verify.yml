@@ -1,0 +1,49 @@
+name: verify
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - develop
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: |
+            package-lock.json
+            sidecars/node-backend/package-lock.json
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install frontend deps
+        run: npm ci
+
+      - name: Install node sidecar deps
+        run: npm ci
+        working-directory: sidecars/node-backend
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Build node sidecar
+        run: npm run build
+        working-directory: sidecars/node-backend
+
+      - name: Python syntax check
+        run: python -m compileall sidecars/python-automation
+
+      - name: Contract static verify
+        run: npm run verify:static

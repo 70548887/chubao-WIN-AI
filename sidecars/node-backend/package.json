@@ -5,7 +5,7 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "node ./scripts/dev-with-port-guard.mjs",
     "build": "tsdown src/index.ts --format esm --out-dir dist",
     "start": "node dist/index.js"
   },

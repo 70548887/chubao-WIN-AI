@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { processUserMessage } from '../core';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -12,62 +13,52 @@ function Chat() {
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
   useEffect(() => {
-    scrollToBottom();
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   const sendMessage = async () => {
-    if (!input.trim() || loading) return;
+    const text = input.trim();
+    if (!text || loading) {
+      return;
+    }
 
     const userMessage: Message = {
       role: 'user',
-      content: input,
+      content: text,
       timestamp: new Date(),
     };
 
-    setMessages(prev => [...prev, userMessage]);
+    setMessages((prev) => [...prev, userMessage]);
     setInput('');
     setLoading(true);
 
     try {
-      // 调用 Node.js 后端
-      const response = await fetch('http://localhost:3100/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: input }),
-      });
-
-      const data = await response.json();
-      
-      if (data.success) {
-        const assistantMessage: Message = {
-          role: 'assistant',
-          content: data.response,
-          timestamp: new Date(),
-        };
-        setMessages(prev => [...prev, assistantMessage]);
-      }
-    } catch (error) {
-      console.error('发送消息失败:', error);
-      const errorMessage: Message = {
+      const assistantText = await processUserMessage(text);
+      const assistantMessage: Message = {
         role: 'assistant',
-        content: '抱歉，发生了错误。请检查后端服务是否正常运行。',
+        content: assistantText,
         timestamp: new Date(),
       };
-      setMessages(prev => [...prev, errorMessage]);
+      setMessages((prev) => [...prev, assistantMessage]);
+    } catch (error) {
+      const assistantMessage: Message = {
+        role: 'assistant',
+        content: `Request failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, assistantMessage]);
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      void sendMessage();
     }
   };
 
@@ -75,36 +66,36 @@ function Chat() {
     <div className="chat-container">
       <div className="chat-header">
         <h2>Chubao AI</h2>
-        <span className="subtitle">Windows 本地 AI 助手</span>
+        <span className="subtitle">Windows local AI assistant</span>
       </div>
 
       <div className="messages">
         {messages.length === 0 && (
           <div className="welcome">
-            <h3>👋 你好！我是 Chubao AI</h3>
-            <p>我可以帮你：</p>
+            <h3>Welcome to Chubao AI</h3>
+            <p>Try messages like:</p>
             <ul>
-              <li>🖥️ 控制桌面应用</li>
-              <li>📊 跟踪 Qoder 编程进度</li>
-              <li>🧪 运行自动化测试</li>
-              <li>📁 管理文件和记忆</li>
+              <li>show coding progress</li>
+              <li>list windows</li>
+              <li>check sidecar status</li>
+              <li>normal chat question</li>
             </ul>
           </div>
         )}
 
-        {messages.map((msg, idx) => (
-          <div key={idx} className={`message ${msg.role}`}>
-            <div className="message-content">{msg.content}</div>
-            <div className="message-time">
-              {msg.timestamp.toLocaleTimeString()}
-            </div>
+        {messages.map((message, index) => (
+          <div key={index} className={`message ${message.role}`}>
+            <div className="message-content">{message.content}</div>
+            <div className="message-time">{message.timestamp.toLocaleTimeString()}</div>
           </div>
         ))}
 
         {loading && (
           <div className="message assistant">
             <div className="message-content typing">
-              <span></span><span></span><span></span>
+              <span />
+              <span />
+              <span />
             </div>
           </div>
         )}
@@ -115,13 +106,13 @@ function Chat() {
       <div className="input-area">
         <textarea
           value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyPress={handleKeyPress}
-          placeholder="输入消息... (Enter 发送)"
+          onChange={(event) => setInput(event.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Type a message... (Enter to send)"
           rows={1}
         />
-        <button onClick={sendMessage} disabled={loading || !input.trim()}>
-          发送
+        <button onClick={() => void sendMessage()} disabled={loading || !input.trim()}>
+          Send
         </button>
       </div>
     </div>
