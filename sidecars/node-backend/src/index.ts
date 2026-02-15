@@ -15,12 +15,16 @@ import { analyzeCodingProgress } from './coding/progress.js';
 import { toolManager } from './tools/index.js';
 import { GatewayServer } from './gateway/server.js';
 import { registerMultiAgentRoutes } from './routes/multiAgent.js';
+import { registerTaskSchedulerRoutes } from './routes/taskScheduler.js';
 import {
   LarkIntegration,
   WhatsAppIntegration,
 } from './gateway/platforms/index.js';
 // Channel system (plugin-based EventBus architecture)
 import { getEventBus, ChannelManager, Notifier, TelegramPlugin } from './channel/index.js';
+// Task queue and cron scheduler
+import { TaskQueue } from './agent/taskQueue.js';
+import { CronScheduler } from './agent/cronScheduler.js';
 
 config();
 
@@ -168,6 +172,8 @@ async function main() {
   const dependencies: Record<string, DependencyState> = {
     memory: 'degraded',
     gateway: 'degraded',
+    taskQueue: 'degraded',
+    cronScheduler: 'degraded',
     lark: 'disabled',
     telegram: 'disabled',
     whatsapp: 'disabled',
@@ -187,6 +193,41 @@ async function main() {
   const continuousDevMonitor = new ContinuousDevMonitor(agentRuntime);
   new GatewayServer(wss, agentRuntime);
   dependencies.gateway = 'ok';
+
+  // ---------------------------------------------------------------------------
+  // Task Queue & Cron Scheduler
+  // ---------------------------------------------------------------------------
+  console.log('📋 初始化任务队列...');
+  const taskQueue = new TaskQueue({
+    executeTask: async (payload, task) => {
+      console.log(`[TaskQueue] Executing task ${task.id}: ${payload.kind}`);
+      try {
+        if (payload.kind === 'chat') {
+          const message = payload.message as string;
+          const sessionId = payload.sessionId as string | undefined;
+          const response = await agentRuntime.chat(message, sessionId);
+          return { success: true, response };
+        }
+        // Add more task kinds as needed
+        return { success: false, error: `Unknown task kind: ${payload.kind}` };
+      } catch (error) {
+        console.error(`[TaskQueue] Task ${task.id} failed:`, error);
+        throw error;
+      }
+    },
+    maxConcurrent: 4,
+    stateEnabled: true,
+  });
+
+  console.log('⏰ 初始化定时调度器...');
+  const cronScheduler = new CronScheduler({
+    enqueueTask: (payload) => taskQueue.enqueue(payload),
+    tickMs: 15_000, // Check every 15 seconds
+    stateEnabled: true,
+  });
+
+  dependencies.taskQueue = 'ok';
+  dependencies.cronScheduler = 'ok';
 
   console.log('📱 初始化消息平台...');
 
@@ -427,6 +468,15 @@ async function main() {
     executeTool: async (name, args) => agentRuntime.executeTool(name, args),
     inferErrorCode,
     sendError,
+  });
+
+  // Register task scheduler routes (Task Queue + Cron)
+  registerTaskSchedulerRoutes({
+    app,
+    taskQueue,
+    cronScheduler,
+    inferErrorCode: inferErrorCode as any,
+    sendError: sendError as any,
   });
 
   app.get('/api/skills', async (_req, res) => {
@@ -674,6 +724,14 @@ async function main() {
 
   process.on('SIGINT', async () => {
     console.log('\n正在关闭服务器...');
+
+    // Stop cron scheduler
+    try {
+      cronScheduler.stop();
+      console.log('✅ Cron scheduler stopped');
+    } catch (err) {
+      console.error('❌ Error stopping cron scheduler:', err);
+    }
 
     // Stop channel system (Telegram, future channels...)
     try {
