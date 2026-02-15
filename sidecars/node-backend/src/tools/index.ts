@@ -38,6 +38,8 @@ import {
   listMultiAgentGroups,
   startMultiAgentGroup,
 } from './multiAgentCoordinator.js';
+import { devTools } from './devTools.js';
+import { externalCliTools } from './externalCliTools.js';
 
 // Tool definition interface
 export interface Tool {
@@ -932,12 +934,12 @@ export const hotkeyTool: Tool = {
   name: 'hotkey',
   description: 'Send keyboard shortcut combination',
   parameters: z.object({
-    keys: z.array(z.string()).describe('Key list, e.g. ["ctrl", "c"]'),
+    combo: z.array(z.string()).describe('Key combo list, e.g. ["ctrl", "c"]'),
   }),
-  execute: async (args: { keys: string[] }) => {
+  execute: async (args: { combo: string[] }) => {
     const response = await fetchWithRetry(`${PYTHON_SERVICE_URL}/api/hotkey`, {
       method: 'POST',
-      body: JSON.stringify({ keys: args.keys }),
+      body: JSON.stringify({ keys: args.combo }),
     });
     const data = await response.json();
 
@@ -1246,6 +1248,8 @@ export const tools: Tool[] = [
   multiAgentCancelTool,
   multiAgentListTool,
   codingProgressTool,
+  ...devTools,
+  ...externalCliTools,
 ];
 
 /**
@@ -1293,6 +1297,18 @@ export class ToolManager {
     } finally {
       this.skillsInitializing = null;
     }
+  }
+
+  /**
+   * Force-reload all skills, resetting the initialized flag.
+   * Called after agent creates a new skill or installs one.
+   */
+  async forceReloadSkills(): Promise<void> {
+    this.skillsInitialized = false;
+    this.skillsInitializing = null;
+    await this.reloadSkills();
+    this.skillsInitialized = true;
+    console.log(`\u{1F504} Skills reloaded: ${this.skillToolNames.size} skill tools active`);
   }
 
   async installSkill(skillPath: string): Promise<{
@@ -1485,31 +1501,59 @@ export class ToolManager {
     const properties: Record<string, any> = {};
 
     for (const [key, value] of Object.entries(shape)) {
-      const zodType = value as z.ZodTypeAny;
-
-      if (zodType instanceof z.ZodString) {
-        properties[key] = { type: 'string' };
-      } else if (zodType instanceof z.ZodNumber) {
-        properties[key] = { type: 'number' };
-      } else if (zodType instanceof z.ZodBoolean) {
-        properties[key] = { type: 'boolean' };
-      } else if (zodType instanceof z.ZodArray) {
-        properties[key] = { type: 'array' };
-      } else if (zodType instanceof z.ZodObject) {
-        properties[key] = {
-          type: 'object',
-          properties: this.zodToJsonSchema(zodType),
-        };
-      } else {
-        properties[key] = {};
-      }
-
-      if (zodType.description) {
-        properties[key].description = zodType.description;
-      }
+      properties[key] = this.zodTypeToJsonSchema(value as z.ZodTypeAny);
     }
 
     return properties;
+  }
+
+  /**
+   * Convert a single Zod type to JSON Schema, handling wrappers
+   * like ZodOptional, ZodDefault, ZodNullable, etc.
+   */
+  private zodTypeToJsonSchema(zodType: z.ZodTypeAny): Record<string, any> {
+    // Unwrap optional / default / nullable wrappers
+    let inner: z.ZodTypeAny = zodType;
+    while (
+      inner instanceof z.ZodOptional ||
+      inner instanceof z.ZodDefault ||
+      inner instanceof z.ZodNullable
+    ) {
+      inner = (inner as any)._def.innerType;
+    }
+
+    let schema: Record<string, any>;
+
+    if (inner instanceof z.ZodString) {
+      schema = { type: 'string' };
+    } else if (inner instanceof z.ZodNumber) {
+      schema = { type: 'number' };
+    } else if (inner instanceof z.ZodBoolean) {
+      schema = { type: 'boolean' };
+    } else if (inner instanceof z.ZodEnum) {
+      const values = inner._def.values as string[];
+      schema = { type: 'string', enum: values };
+    } else if (inner instanceof z.ZodArray) {
+      const itemType = inner._def.type as z.ZodTypeAny;
+      schema = { type: 'array', items: this.zodTypeToJsonSchema(itemType) };
+    } else if (inner instanceof z.ZodObject) {
+      schema = {
+        type: 'object',
+        properties: this.zodToJsonSchema(inner),
+      };
+    } else {
+      // Fallback for unsupported types
+      schema = {};
+    }
+
+    // Attach description from the original (possibly wrapped) type
+    if (zodType.description) {
+      schema.description = zodType.description;
+    } else if (inner.description) {
+      schema.description = inner.description;
+    }
+
+    return schema;
   }
 }
 export const toolManager = new ToolManager();

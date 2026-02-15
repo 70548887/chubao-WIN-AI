@@ -807,6 +807,7 @@ export class AgentRuntime {
         'restart_sidecar', 'validate_code',  // Self-upgrade tools
         'git_backup', 'git_rollback', 'health_check', 'log_self_upgrade', 'get_self_upgrade_history',  // Long-running support
         'send_notification', 'send_channel_message', 'get_channel_status',  // Channel notification tools
+        'call_claude_code', 'call_opencode', 'call_cursor', 'list_available_clis',  // External AI CLI tools
       ]);
       const sortedDefs = [
         ...toolDefs.filter((t) => DEV_PRIORITY.has(t.name)),
@@ -1002,6 +1003,7 @@ export class AgentRuntime {
         'restart_sidecar', 'validate_code',  // Self-upgrade tools
         'git_backup', 'git_rollback', 'health_check', 'log_self_upgrade', 'get_self_upgrade_history',  // Long-running support
         'send_notification', 'send_channel_message', 'get_channel_status',  // Channel notification tools
+        'call_claude_code', 'call_opencode', 'call_cursor', 'list_available_clis',  // External AI CLI tools
       ]);
       const sortedDefs = [
         ...toolDefs.filter((t) => DEV_PRIORITY.has(t.name)),
