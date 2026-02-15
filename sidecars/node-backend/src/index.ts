@@ -25,6 +25,7 @@ import { getEventBus, ChannelManager, Notifier, TelegramPlugin } from './channel
 // Task queue and cron scheduler
 import { TaskQueue } from './agent/taskQueue.js';
 import { CronScheduler } from './agent/cronScheduler.js';
+import { initializeSubagentRegistry } from './agent/subagentRegistry.js';
 
 config();
 
@@ -228,6 +229,14 @@ async function main() {
 
   dependencies.taskQueue = 'ok';
   dependencies.cronScheduler = 'ok';
+
+  // Initialize subagent registry
+  console.log('🤖 初始化子 Agent 注册表...');
+  initializeSubagentRegistry({
+    agentRuntime,
+    memoryManager,
+  });
+  console.log('✅ 子 Agent 系统已启用');
 
   console.log('📱 初始化消息平台...');
 

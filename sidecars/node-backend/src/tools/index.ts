@@ -40,6 +40,7 @@ import {
 } from './multiAgentCoordinator.js';
 import { devTools } from './devTools.js';
 import { externalCliTools } from './externalCliTools.js';
+import { subagentTools } from './subagentTools.js';
 
 // Tool definition interface
 export interface Tool {
@@ -1250,6 +1251,7 @@ export const tools: Tool[] = [
   codingProgressTool,
   ...devTools,
   ...externalCliTools,
+  ...subagentTools,
 ];
 
 /**
