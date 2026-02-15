@@ -41,6 +41,7 @@ import {
 import { devTools } from './devTools.js';
 import { externalCliTools } from './externalCliTools.js';
 import { subagentTools } from './subagentTools.js';
+import { agentRouterTools } from './agentRouterTools.js';
 
 // Tool definition interface
 export interface Tool {
@@ -1252,6 +1253,7 @@ export const tools: Tool[] = [
   ...devTools,
   ...externalCliTools,
   ...subagentTools,
+  ...agentRouterTools,
 ];
 
 /**

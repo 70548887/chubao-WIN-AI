@@ -809,6 +809,7 @@ export class AgentRuntime {
         'send_notification', 'send_channel_message', 'get_channel_status',  // Channel notification tools
         'call_claude_code', 'call_opencode', 'call_cursor', 'list_available_clis',  // External AI CLI tools
         'spawn_subagent', 'get_subagent_status', 'list_subagents', 'cancel_subagent',  // Subagent tools
+        'list_agents', 'start_agent', 'stop_agent', 'get_agent_status', 'register_custom_agent', 'delegate_to_agent',  // Multi-agent routing
       ]);
       const sortedDefs = [
         ...toolDefs.filter((t) => DEV_PRIORITY.has(t.name)),
@@ -1006,6 +1007,7 @@ export class AgentRuntime {
         'send_notification', 'send_channel_message', 'get_channel_status',  // Channel notification tools
         'call_claude_code', 'call_opencode', 'call_cursor', 'list_available_clis',  // External AI CLI tools
         'spawn_subagent', 'get_subagent_status', 'list_subagents', 'cancel_subagent',  // Subagent tools
+        'list_agents', 'start_agent', 'stop_agent', 'get_agent_status', 'register_custom_agent', 'delegate_to_agent',  // Multi-agent routing
       ]);
       const sortedDefs = [
         ...toolDefs.filter((t) => DEV_PRIORITY.has(t.name)),

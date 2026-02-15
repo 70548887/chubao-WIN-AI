@@ -26,6 +26,7 @@ import { getEventBus, ChannelManager, Notifier, TelegramPlugin } from './channel
 import { TaskQueue } from './agent/taskQueue.js';
 import { CronScheduler } from './agent/cronScheduler.js';
 import { initializeSubagentRegistry } from './agent/subagentRegistry.js';
+import { initializeAgentRouter } from './agent/agentRouter.js';
 
 config();
 
@@ -237,6 +238,13 @@ async function main() {
     memoryManager,
   });
   console.log('✅ 子 Agent 系统已启用');
+
+  // Initialize agent router
+  console.log('🎯 初始化多 Agent 路由系统...');
+  const agentRouter = initializeAgentRouter({
+    memoryManager,
+  });
+  console.log(`✅ 多 Agent 路由已启用 (${agentRouter.listAgentConfigs().length} agents)`);
 
   console.log('📱 初始化消息平台...');
 
