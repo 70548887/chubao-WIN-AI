@@ -9,6 +9,7 @@ import { createServer } from 'http';
 import { randomUUID } from 'node:crypto';
 import { config } from 'dotenv';
 import { AgentRuntime } from './agent/runtime.js';
+import { ContinuousDevMonitor } from './agent/continuous-monitor.js';
 import { MemoryManager } from './memory/manager.js';
 import { analyzeCodingProgress } from './coding/progress.js';
 import { toolManager } from './tools/index.js';
@@ -16,9 +17,10 @@ import { GatewayServer } from './gateway/server.js';
 import { registerMultiAgentRoutes } from './routes/multiAgent.js';
 import {
   LarkIntegration,
-  TelegramIntegration,
   WhatsAppIntegration,
 } from './gateway/platforms/index.js';
+// Channel system (plugin-based EventBus architecture)
+import { getEventBus, ChannelManager, Notifier, TelegramPlugin } from './channel/index.js';
 
 config();
 
@@ -54,6 +56,14 @@ function getErrorMessage(error: unknown): string {
     return error.message;
   }
   return String(error);
+}
+
+function normalizeSessionId(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
 }
 
 function inferErrorCode(error: unknown): ErrorCode {
@@ -119,6 +129,19 @@ async function main() {
   console.log('🚀 Chubao AI Node.js 后端启动中...');
 
   const app = express();
+
+  // CORS middleware - allow frontend dev server & Tauri webview
+  app.use((_req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Request-Id');
+    if (_req.method === 'OPTIONS') {
+      res.sendStatus(204);
+      return;
+    }
+    next();
+  });
+
   app.use(express.json());
 
   const server = createServer(app);
@@ -161,6 +184,7 @@ async function main() {
   }
 
   const agentRuntime = new AgentRuntime(memoryManager);
+  const continuousDevMonitor = new ContinuousDevMonitor(agentRuntime);
   new GatewayServer(wss, agentRuntime);
   dependencies.gateway = 'ok';
 
@@ -191,26 +215,55 @@ async function main() {
     console.log('⚠️  飞书集成未启用 (缺少 LARK_APP_ID 或 LARK_APP_SECRET)');
   }
 
-  let telegramIntegration: TelegramIntegration | null = null;
+  // ---------------------------------------------------------------------------
+  // Channel System — plugin-based EventBus architecture
+  // ---------------------------------------------------------------------------
+  const eventBus = getEventBus();
+  const channelManager = new ChannelManager(eventBus);
+  const notifier = new Notifier(eventBus, channelManager, {
+    enabled: true,
+    defaultChannels: ['telegram'],
+    rules: [],
+    throttleMs: 2000,
+  });
+
   if (process.env.TELEGRAM_BOT_TOKEN) {
     try {
-      telegramIntegration = new TelegramIntegration(
-        {
-          botToken: process.env.TELEGRAM_BOT_TOKEN,
-          webhookUrl: process.env.TELEGRAM_WEBHOOK_URL,
-          allowedUserIds: process.env.TELEGRAM_ALLOWED_USERS
-            ? process.env.TELEGRAM_ALLOWED_USERS
-                .split(',')
-                .map((id) => parseInt(id.trim(), 10))
-                .filter((id) => Number.isFinite(id))
-            : undefined,
-        },
-        agentRuntime
-      );
+      // Create plugin-based Telegram channel
+      const telegramPlugin = new TelegramPlugin(agentRuntime, eventBus);
+      channelManager.register(telegramPlugin, {
+        id: 'telegram',
+        name: 'Telegram',
+        enabled: true,
+        botToken: process.env.TELEGRAM_BOT_TOKEN,
+        webhookUrl: process.env.TELEGRAM_WEBHOOK_URL,
+        allowedUserIds: process.env.TELEGRAM_ALLOWED_USERS
+          ? process.env.TELEGRAM_ALLOWED_USERS
+              .split(',')
+              .map((id) => parseInt(id.trim(), 10))
+              .filter((id) => Number.isFinite(id))
+          : undefined,
+      });
 
-      await telegramIntegration.start();
+      await channelManager.startAll();
+      notifier.start();
+
+      // Listen for outbound messages from tools and route them
+      eventBus.on('message:outbound', async (msg) => {
+        try {
+          await channelManager.sendMessage(msg);
+        } catch (err) {
+          console.error(`[Channel] Failed to send outbound to ${msg.channel}:`, err);
+        }
+      });
+
+      // Listen for inbound messages and route to agent
+      eventBus.on('message:inbound', (msg) => {
+        console.log(`[Channel] Inbound: ${msg.channel} | ${msg.text.substring(0, 50)}`);
+      });
+
       dependencies.telegram = 'ok';
-      console.log('✅ Telegram 集成已启用');
+      console.log('✅ Telegram 集成已启用 (Channel Plugin Architecture)');
     } catch (error) {
       dependencies.telegram = 'error';
       console.error('❌ Telegram 集成初始化失败:', error);
@@ -269,10 +322,17 @@ async function main() {
       });
       return;
     }
+    if (sessionId !== undefined && typeof sessionId !== 'string') {
+      sendError(res, 400, 'INVALID_ARGUMENT', 'sessionId must be a string', {
+        field: 'sessionId',
+      });
+      return;
+    }
 
     try {
-      const response = await agentRuntime.chat(message, sessionId);
-      res.json({ success: true, response });
+      const resolvedSessionId = normalizeSessionId(sessionId) ?? `http_${createRequestId()}`;
+      const response = await agentRuntime.chat(message, resolvedSessionId);
+      res.json({ success: true, response, sessionId: resolvedSessionId });
     } catch (error) {
       console.error('Chat error:', error);
       sendError(res, 500, inferErrorCode(error), getErrorMessage(error));
@@ -437,22 +497,20 @@ async function main() {
       status.lark = { enabled: false, state: dependencies.lark };
     }
 
-    if (telegramIntegration) {
-      try {
-        const botInfo = await telegramIntegration.getBotInfo();
-        status.telegram = {
-          enabled: true,
-          state: dependencies.telegram,
-          username: botInfo.username,
-          firstName: botInfo.first_name,
-        };
-      } catch (error) {
-        status.telegram = {
-          enabled: true,
-          state: 'error',
-          error: getErrorMessage(error),
-        };
-      }
+    // Telegram status via new Channel Plugin system
+    const telegramPlugin = channelManager.getPlugin('telegram');
+    if (telegramPlugin) {
+      const pluginStatus = telegramPlugin.getStatus();
+      status.telegram = {
+        enabled: true,
+        state: dependencies.telegram,
+        pluginState: pluginStatus.state,
+        uptime: pluginStatus.uptime,
+        ownerChatId: telegramPlugin.getOwnerChatId(),
+        lastInboundAt: pluginStatus.lastInboundAt,
+        lastOutboundAt: pluginStatus.lastOutboundAt,
+        lastError: pluginStatus.lastError,
+      };
     } else {
       status.telegram = { enabled: false, state: dependencies.telegram };
     }
@@ -473,6 +531,142 @@ async function main() {
     res.json({ success: true, platforms: status });
   });
 
+  // ---- Model Config routes ----
+
+  app.get('/api/config/model', (_req, res) => {
+    try {
+      res.json({ success: true, config: agentRuntime.getModelConfig() });
+    } catch (error) {
+      sendError(res, 500, inferErrorCode(error), getErrorMessage(error));
+    }
+  });
+
+  app.put('/api/config/model', (req, res) => {
+    try {
+      const body = req.body ?? {};
+      agentRuntime.updateModelConfig({
+        provider: typeof body.provider === 'string' ? body.provider : undefined,
+        openaiModel: typeof body.openaiModel === 'string' ? body.openaiModel : undefined,
+        openaiBaseUrl: typeof body.openaiBaseUrl === 'string' ? body.openaiBaseUrl : undefined,
+        openaiApiKey: typeof body.openaiApiKey === 'string' ? body.openaiApiKey : undefined,
+        anthropicModel: typeof body.anthropicModel === 'string' ? body.anthropicModel : undefined,
+        anthropicBaseUrl: typeof body.anthropicBaseUrl === 'string' ? body.anthropicBaseUrl : undefined,
+        anthropicApiKey: typeof body.anthropicApiKey === 'string' ? body.anthropicApiKey : undefined,
+      });
+      res.json({ success: true, config: agentRuntime.getModelConfig() });
+    } catch (error) {
+      sendError(res, 500, inferErrorCode(error), getErrorMessage(error));
+    }
+  });
+
+  app.post('/api/config/model/persist', (req, res) => {
+    const body = req.body ?? {};
+
+    if (body.dryRun !== undefined && typeof body.dryRun !== 'boolean') {
+      sendError(res, 400, 'INVALID_ARGUMENT', 'dryRun must be a boolean', {
+        field: 'dryRun',
+      });
+      return;
+    }
+
+    if (body.includeSecrets !== undefined && typeof body.includeSecrets !== 'boolean') {
+      sendError(res, 400, 'INVALID_ARGUMENT', 'includeSecrets must be a boolean', {
+        field: 'includeSecrets',
+      });
+      return;
+    }
+
+    try {
+      const result = agentRuntime.persistModelConfig({
+        dryRun: typeof body.dryRun === 'boolean' ? body.dryRun : true,
+        includeSecrets: body.includeSecrets === true,
+      });
+
+      res.json({
+        success: true,
+        config: agentRuntime.getModelConfig(),
+        result,
+      });
+    } catch (error) {
+      sendError(res, 500, inferErrorCode(error), getErrorMessage(error));
+    }
+  });
+
+  // ---- Claude Code Config Sync routes ----
+
+  app.get('/api/config/claude-code', (_req, res) => {
+    try {
+      const ccConfig = AgentRuntime.readClaudeCodeConfig();
+      res.json({ success: true, ...ccConfig });
+    } catch (error) {
+      sendError(res, 500, inferErrorCode(error), getErrorMessage(error));
+    }
+  });
+
+  app.post('/api/config/sync-claude-code', (_req, res) => {
+    try {
+      const result = agentRuntime.syncFromClaudeCode();
+      res.json({ ...result, config: agentRuntime.getModelConfig() });
+    } catch (error) {
+      sendError(res, 500, inferErrorCode(error), getErrorMessage(error));
+    }
+  });
+
+  // ---- Continuous Dev Monitor routes ----
+
+  app.post('/api/continuous-dev/start', async (req, res) => {
+    const { taskDescription, intervalSeconds, maxCycles, projectPath, windowTitle, pauseOnError, maxConsecutiveErrors } = req.body ?? {};
+    if (typeof taskDescription !== 'string' || taskDescription.trim().length === 0) {
+      sendError(res, 400, 'INVALID_ARGUMENT', 'taskDescription is required', { field: 'taskDescription' });
+      return;
+    }
+    try {
+      await continuousDevMonitor.start({
+        taskDescription: taskDescription.trim(),
+        intervalSeconds: typeof intervalSeconds === 'number' ? intervalSeconds : undefined,
+        maxCycles: typeof maxCycles === 'number' ? maxCycles : undefined,
+        projectPath: typeof projectPath === 'string' ? projectPath.trim() : undefined,
+        windowTitle: typeof windowTitle === 'string' ? windowTitle.trim() : undefined,
+        pauseOnError: typeof pauseOnError === 'boolean' ? pauseOnError : undefined,
+        maxConsecutiveErrors: typeof maxConsecutiveErrors === 'number' ? maxConsecutiveErrors : undefined,
+      });
+      res.json({ success: true, state: continuousDevMonitor.getState() });
+    } catch (error) {
+      sendError(res, 409, inferErrorCode(error), getErrorMessage(error));
+    }
+  });
+
+  app.post('/api/continuous-dev/stop', async (_req, res) => {
+    try {
+      await continuousDevMonitor.stop();
+      res.json({ success: true, state: continuousDevMonitor.getState() });
+    } catch (error) {
+      sendError(res, 500, inferErrorCode(error), getErrorMessage(error));
+    }
+  });
+
+  app.post('/api/continuous-dev/pause', async (_req, res) => {
+    try {
+      await continuousDevMonitor.pause();
+      res.json({ success: true, state: continuousDevMonitor.getState() });
+    } catch (error) {
+      sendError(res, 409, inferErrorCode(error), getErrorMessage(error));
+    }
+  });
+
+  app.post('/api/continuous-dev/resume', async (_req, res) => {
+    try {
+      await continuousDevMonitor.resume();
+      res.json({ success: true, state: continuousDevMonitor.getState() });
+    } catch (error) {
+      sendError(res, 409, inferErrorCode(error), getErrorMessage(error));
+    }
+  });
+
+  app.get('/api/continuous-dev/status', (_req, res) => {
+    res.json({ success: true, state: continuousDevMonitor.getState() });
+  });
+
   server.listen(PORT, () => {
     console.log(`✅ Node.js 后端已启动: http://localhost:${PORT}`);
     console.log(`   WebSocket: ws://localhost:${PORT}/ws`);
@@ -481,8 +675,13 @@ async function main() {
   process.on('SIGINT', async () => {
     console.log('\n正在关闭服务器...');
 
-    if (telegramIntegration) {
-      console.log('正在关闭 Telegram...');
+    // Stop channel system (Telegram, future channels...)
+    try {
+      notifier.stop();
+      await channelManager.stopAll('SIGINT shutdown');
+      console.log('✅ Channel system stopped');
+    } catch (err) {
+      console.error('❌ Error stopping channel system:', err);
     }
 
     if (whatsappIntegration) {
