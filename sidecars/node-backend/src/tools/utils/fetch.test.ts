@@ -123,3 +123,83 @@ describe('fetchWithTimeout', () => {
     );
   });
 });
+
+describe('fetch edge cases', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    global.fetch = vi.fn();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('should handle zero retries', async () => {
+    // When maxRetries is 0, the function should not make any requests
+    await expect(fetchWithRetry('http://test.com', {}, 0)).rejects.toThrow('Request failed after retries');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('should handle single retry', async () => {
+    const mockResponse = new Response('{}', { status: 200 });
+    vi.mocked(fetch)
+      .mockRejectedValueOnce(new Error('Network error'))
+      .mockResolvedValueOnce(mockResponse);
+
+    const promise = fetchWithRetry('http://test.com', {}, 2);
+    await vi.advanceTimersByTimeAsync(1000);
+    const result = await promise;
+
+    expect(result).toBe(mockResponse);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('should handle empty options', async () => {
+    const mockResponse = new Response('{}', { status: 200 });
+    vi.mocked(fetch).mockResolvedValueOnce(mockResponse);
+
+    await fetchWithRetry('http://test.com');
+
+    expect(fetch).toHaveBeenCalledWith(
+      'http://test.com',
+      expect.objectContaining({
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+  });
+
+  it('should handle very long URL', async () => {
+    const longUrl = 'http://test.com/' + 'a'.repeat(2000);
+    const mockResponse = new Response('{}', { status: 200 });
+    vi.mocked(fetch).mockResolvedValueOnce(mockResponse);
+
+    const result = await fetchWithRetry(longUrl);
+    expect(result).toBe(mockResponse);
+  });
+
+  it('should handle special characters in URL', async () => {
+    const specialUrl = 'http://test.com/path?query=test&special=%20%26%3D';
+    const mockResponse = new Response('{}', { status: 200 });
+    vi.mocked(fetch).mockResolvedValueOnce(mockResponse);
+
+    const result = await fetchWithRetry(specialUrl);
+    expect(result).toBe(mockResponse);
+  });
+
+  it('should handle non-JSON response', async () => {
+    const mockResponse = new Response('plain text', { status: 200 });
+    vi.mocked(fetch).mockResolvedValueOnce(mockResponse);
+
+    const result = await fetchWithRetry('http://test.com');
+    expect(result).toBe(mockResponse);
+  });
+
+  it('should handle error response status', async () => {
+    const mockResponse = new Response('{}', { status: 500 });
+    vi.mocked(fetch).mockResolvedValueOnce(mockResponse);
+
+    const result = await fetchWithRetry('http://test.com');
+    expect(result.status).toBe(500);
+  });
+});

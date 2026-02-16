@@ -113,4 +113,81 @@ describe('getRequiredParams', () => {
     const result = getRequiredParams(schema);
     expect(result).toEqual(['first', 'second', 'third']);
   });
+
+  describe('edge cases', () => {
+    it('should handle deeply nested objects', () => {
+      const schema = z.object({
+        level1: z.object({
+          level2: z.object({
+            level3: z.object({
+              value: z.string(),
+            }),
+          }),
+        }),
+      });
+      const result = zodToJsonSchema(schema);
+      expect(result.level1.type).toBe('object');
+      expect(result.level1.properties.level2.type).toBe('object');
+      expect(result.level1.properties.level2.properties.level3.type).toBe('object');
+    });
+
+    it('should handle arrays of objects', () => {
+      const schema = z.object({
+        items: z.array(z.object({
+          id: z.number(),
+          name: z.string(),
+        })),
+      });
+      const result = zodToJsonSchema(schema);
+      expect(result.items.type).toBe('array');
+      expect(result.items.items.type).toBe('object');
+      expect(result.items.items.properties.id.type).toBe('number');
+    });
+
+    it('should handle union types', () => {
+      const schema = z.object({
+        value: z.union([z.string(), z.number()]),
+      });
+      const result = zodToJsonSchema(schema);
+      // Union types should result in empty object (not directly supported)
+      expect(result.value).toEqual({});
+    });
+
+    it('should handle optional with default', () => {
+      const schema = z.object({
+        count: z.number().optional().default(0),
+      });
+      const result = getRequiredParams(schema);
+      // Fields with default are not required
+      expect(result).toEqual([]);
+    });
+
+    it('should handle empty object schema', () => {
+      const schema = z.object({});
+      const result = zodToJsonSchema(schema);
+      expect(result).toEqual({});
+    });
+
+    it('should handle many fields', () => {
+      const fields: Record<string, z.ZodString> = {};
+      for (let i = 0; i < 100; i++) {
+        fields[`field${i}`] = z.string();
+      }
+      const schema = z.object(fields);
+      const result = zodToJsonSchema(schema);
+      expect(Object.keys(result)).toHaveLength(100);
+    });
+
+    it('should handle mixed optional and required', () => {
+      const schema = z.object({
+        required1: z.string(),
+        optional1: z.string().optional(),
+        required2: z.number(),
+        optional2: z.number().optional(),
+        required3: z.boolean(),
+      });
+      const result = getRequiredParams(schema);
+      expect(result).toEqual(['required1', 'required2', 'required3']);
+    });
+  });
 });
