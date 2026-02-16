@@ -27,8 +27,8 @@
         "smoke": "powershell -ExecutionPolicy Bypass -File .\\scripts\\smoke.ps1",
         "test:core": "vitest run src/core src/skills/coding",
         "test:core:watch": "vitest src/core src/skills/coding",
-        "test:node-backend": "vitest run sidecars/node-backend/src/agent sidecars/node-backend/src/tools sidecars/node-backend/src/routes sidecars/node-backend/src/gateway sidecars/node-backend/src/channel sidecars/node-backend/src/memory",
-        "test:node-backend:watch": "vitest sidecars/node-backend/src/agent sidecars/node-backend/src/tools sidecars/node-backend/src/routes sidecars/node-backend/src/gateway sidecars/node-backend/src/channel sidecars/node-backend/src/memory"
+        "test:node-backend": "vitest run sidecars/node-backend/src/agent sidecars/node-backend/src/tools sidecars/node-backend/src/routes sidecars/node-backend/src/gateway sidecars/node-backend/src/channel sidecars/node-backend/src/memory sidecars/node-backend/src/coding",
+        "test:node-backend:watch": "vitest sidecars/node-backend/src/agent sidecars/node-backend/src/tools sidecars/node-backend/src/routes sidecars/node-backend/src/gateway sidecars/node-backend/src/channel sidecars/node-backend/src/memory sidecars/node-backend/src/coding"
     },
     "dependencies": {
         "@tauri-apps/api": "^2.0.0",
