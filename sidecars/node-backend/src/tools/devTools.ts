@@ -8,7 +8,7 @@ import * as fs from 'node:fs';
 import * as fsPromises from 'node:fs/promises';
 import * as path from 'node:path';
 import { execSync } from 'node:child_process';
-import { toolManager, type Tool } from './index.js';
+import type { Tool } from './index.js';
 import { getEventBus } from '../channel/eventBus.js';
 import type { NotificationEvent } from '../channel/types.js';
 
@@ -414,7 +414,9 @@ ${args.content}`;
     }
 
     // Trigger skills reload so new skills are available immediately
+    // Use dynamic import to avoid circular dependency
     try {
+      const { toolManager } = await import('./index.js');
       await toolManager.forceReloadSkills();
     } catch (reloadErr) {
       // Non-fatal: skill files are created, just reload failed
