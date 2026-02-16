@@ -314,4 +314,218 @@ describe('TelegramPlugin', () => {
       expect(plugin.isHealthy()).toBe(false);
     });
   });
+
+  describe('edge cases', () => {
+    it('should handle message with replyToMessageId', async () => {
+      const config: ChannelPluginConfig = {
+        id: 'telegram',
+        name: 'Telegram',
+        botToken: 'test-token',
+        enabled: true,
+      };
+      await plugin.initialize(config);
+      await plugin.start();
+
+      const result = await plugin.sendMessage({
+        channel: 'telegram',
+        chatId: '123456',
+        text: 'Reply message',
+        replyToMessageId: '456',
+      });
+
+      expect(result.messageId).toBe('123');
+    });
+
+    it('should handle silent message', async () => {
+      const config: ChannelPluginConfig = {
+        id: 'telegram',
+        name: 'Telegram',
+        botToken: 'test-token',
+        enabled: true,
+      };
+      await plugin.initialize(config);
+      await plugin.start();
+
+      const result = await plugin.sendMessage({
+        channel: 'telegram',
+        chatId: '123456',
+        text: 'Silent message',
+        silent: true,
+      });
+
+      expect(result.messageId).toBe('123');
+    });
+
+    it('should handle empty allowedUserIds array', async () => {
+      const config: ChannelPluginConfig = {
+        id: 'telegram',
+        name: 'Telegram',
+        botToken: 'test-token',
+        enabled: true,
+        allowedUserIds: [],
+      };
+      await plugin.initialize(config);
+
+      const isAuthorized = (plugin as any).isAuthorized.bind(plugin);
+      expect(isAuthorized(123456)).toBe(true);
+    });
+
+    it('should handle status before initialization', () => {
+      const status = plugin.getStatus();
+      expect(status.state).toBe('stopped');
+      expect(status.uptime).toBe(0);
+    });
+
+    it('should handle multiple start calls', async () => {
+      const config: ChannelPluginConfig = {
+        id: 'telegram',
+        name: 'Telegram',
+        botToken: 'test-token',
+        enabled: true,
+      };
+      await plugin.initialize(config);
+      await plugin.start();
+      await plugin.start(); // Second start
+
+      expect(plugin.isHealthy()).toBe(true);
+    });
+
+    it('should handle stop without start', async () => {
+      const config: ChannelPluginConfig = {
+        id: 'telegram',
+        name: 'Telegram',
+        botToken: 'test-token',
+        enabled: true,
+      };
+      await plugin.initialize(config);
+      
+      // Should not throw
+      await expect(plugin.stop()).resolves.not.toThrow();
+    });
+
+    it('should handle getStatus with metadata', async () => {
+      process.env.TELEGRAM_OWNER_CHAT_ID = '987654';
+      const config: ChannelPluginConfig = {
+        id: 'telegram',
+        name: 'Telegram',
+        botToken: 'test-token-12345',
+        enabled: true,
+        webhookUrl: 'https://example.com/webhook',
+      };
+      await plugin.initialize(config);
+      await plugin.start();
+
+      const status = plugin.getStatus();
+      expect(status.metadata).toBeDefined();
+      expect(status.metadata?.botToken).toContain('...');
+      expect(status.metadata?.webhookUrl).toBe('https://example.com/webhook');
+      expect(status.metadata?.ownerChatId).toBe('987654');
+
+      delete process.env.TELEGRAM_OWNER_CHAT_ID;
+    });
+
+    it('should handle status with lastError', async () => {
+      const config: ChannelPluginConfig = {
+        id: 'telegram',
+        name: 'Telegram',
+        botToken: 'test-token',
+        enabled: true,
+      };
+      await plugin.initialize(config);
+
+      // Simulate error by accessing private field
+      (plugin as any).lastError = 'Test error';
+
+      const status = plugin.getStatus();
+      expect(status.lastError).toBe('Test error');
+    });
+
+    it('should handle status with timestamps', async () => {
+      const config: ChannelPluginConfig = {
+        id: 'telegram',
+        name: 'Telegram',
+        botToken: 'test-token',
+        enabled: true,
+      };
+      await plugin.initialize(config);
+      await plugin.start();
+
+      // Simulate activity
+      (plugin as any).lastInboundAt = Date.now();
+      (plugin as any).lastOutboundAt = Date.now();
+
+      const status = plugin.getStatus();
+      expect(status.lastInboundAt).toBeDefined();
+      expect(status.lastOutboundAt).toBeDefined();
+    });
+
+    it('should handle isAuthorized with negative userId', async () => {
+      const config: ChannelPluginConfig = {
+        id: 'telegram',
+        name: 'Telegram',
+        botToken: 'test-token',
+        enabled: true,
+        allowedUserIds: [-123456],
+      };
+      await plugin.initialize(config);
+
+      const isAuthorized = (plugin as any).isAuthorized.bind(plugin);
+      expect(isAuthorized(-123456)).toBe(true);
+      expect(isAuthorized(123456)).toBe(false);
+    });
+
+    it('should handle sendMessage with very long text', async () => {
+      const config: ChannelPluginConfig = {
+        id: 'telegram',
+        name: 'Telegram',
+        botToken: 'test-token',
+        enabled: true,
+      };
+      await plugin.initialize(config);
+      await plugin.start();
+
+      const longText = 'a'.repeat(5000);
+      const result = await plugin.sendMessage({
+        channel: 'telegram',
+        chatId: '123456',
+        text: longText,
+      });
+
+      expect(result.messageId).toBe('123');
+    });
+
+    it('should handle sendMessage with special characters', async () => {
+      const config: ChannelPluginConfig = {
+        id: 'telegram',
+        name: 'Telegram',
+        botToken: 'test-token',
+        enabled: true,
+      };
+      await plugin.initialize(config);
+      await plugin.start();
+
+      const specialText = 'Hello \n World \t ! @ # $ % ^ & * ( ) _ + { } | : " < > ?';
+      const result = await plugin.sendMessage({
+        channel: 'telegram',
+        chatId: '123456',
+        text: specialText,
+      });
+
+      expect(result.messageId).toBe('123');
+    });
+
+    it('should handle webhook mode configuration', async () => {
+      const config: ChannelPluginConfig = {
+        id: 'telegram',
+        name: 'Telegram',
+        botToken: 'test-token',
+        enabled: true,
+        webhookUrl: 'https://example.com/webhook',
+      };
+      await plugin.initialize(config);
+      await plugin.start();
+
+      expect(plugin.isHealthy()).toBe(true);
+    });
+  });
 });
