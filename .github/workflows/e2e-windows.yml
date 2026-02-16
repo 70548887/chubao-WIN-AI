@@ -1,0 +1,88 @@
+name: e2e-windows
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - develop
+
+jobs:
+  e2e-windows:
+    name: e2e-windows
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: |
+            package-lock.json
+            sidecars/node-backend/package-lock.json
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install frontend deps
+        run: npm ci
+
+      - name: Install node sidecar deps
+        run: npm ci
+        working-directory: sidecars/node-backend
+
+      - name: Run Windows E2E (retry once for flaky)
+        id: e2e
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $artifactDir = Join-Path $env:GITHUB_WORKSPACE "artifacts/e2e"
+          New-Item -ItemType Directory -Path $artifactDir -Force | Out-Null
+
+          $attempt1Log = Join-Path $artifactDir "verify-attempt-1.log"
+          $attempt2Log = Join-Path $artifactDir "verify-attempt-2.log"
+
+          Write-Host "[e2e] attempt 1: npm run verify"
+          npm run verify *>&1 | Tee-Object -FilePath $attempt1Log
+          $attempt1Exit = $LASTEXITCODE
+
+          if ($attempt1Exit -eq 0) {
+            "flaky=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            "attempts=1" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            exit 0
+          }
+
+          Write-Host "[e2e] attempt 1 failed with exit code $attempt1Exit, retrying once"
+          npm run verify *>&1 | Tee-Object -FilePath $attempt2Log
+          $attempt2Exit = $LASTEXITCODE
+
+          if ($attempt2Exit -eq 0) {
+            "flaky=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            "attempts=2" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            exit 0
+          }
+
+          "flaky=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "attempts=2" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          throw "Windows E2E failed after 2 attempts (attempt1=$attempt1Exit, attempt2=$attempt2Exit)"
+
+      - name: Mark flaky pass in summary
+        if: steps.e2e.outputs.flaky == 'true'
+        shell: pwsh
+        run: |
+          "## Flaky Notice" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "- verify passed on retry (attempts=$(${{ steps.e2e.outputs.attempts }}))" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+
+      - name: Upload E2E logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-windows-logs
+          path: artifacts/e2e
+          if-no-files-found: warn
+          retention-days: 14

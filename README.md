@@ -126,6 +126,17 @@ npm run test:core
 
 仓库内置了 Windows CI 工作流：`.github/workflows/verify.yml`。  
 该流程会执行前端/Node sidecar 构建、Python 语法检查，以及 `npm run verify:static` 静态契约检查。
+
+另外还包含：
+- Secret 扫描：`.github/workflows/secret-scan.yml`
+- Windows 端到端回归（含一次重试与日志产物）：`.github/workflows/e2e-windows.yml`
+
+本地提交前可启用仓库 hook：
+```powershell
+npm run hooks:install
+```
+
+版本控制安全与 E2E 验收基线见：`docs/REPO_GUARDRAILS.md`
 ## 📚 功能模块
 
 ### 1. AI 助手 (Agent)

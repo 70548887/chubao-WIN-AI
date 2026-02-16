@@ -15,6 +15,11 @@
         "dev:parallel:preview": "powershell -ExecutionPolicy Bypass -File .\\scripts\\parallel-dev.ps1 -PreviewOnly",
         "verify": "powershell -ExecutionPolicy Bypass -File .\\scripts\\start.ps1 -Mode verify",
         "verify:static": "powershell -ExecutionPolicy Bypass -File .\\scripts\\smoke.ps1 -StaticOnly",
+        "guardrails:check": "powershell -ExecutionPolicy Bypass -File .\\scripts\\repo-guardrails.ps1 -Mode check",
+        "guardrails:apply": "powershell -ExecutionPolicy Bypass -File .\\scripts\\repo-guardrails.ps1 -Mode apply",
+        "secret:scan": "node ./scripts/secret-scan.mjs --staged",
+        "secret:scan:all": "node ./scripts/secret-scan.mjs --all",
+        "hooks:install": "git config core.hooksPath .githooks",
         "setup:ocr": "powershell -ExecutionPolicy Bypass -File .\\scripts\\setup-ocr.ps1",
         "tauri": "tauri",
         "tauri:dev": "tauri dev",
@@ -22,8 +27,8 @@
         "smoke": "powershell -ExecutionPolicy Bypass -File .\\scripts\\smoke.ps1",
         "test:core": "vitest run src/core src/skills/coding",
         "test:core:watch": "vitest src/core src/skills/coding",
-        "test:node-backend": "vitest run sidecars/node-backend/src/tools sidecars/node-backend/src/routes",
-        "test:node-backend:watch": "vitest sidecars/node-backend/src/tools sidecars/node-backend/src/routes"
+        "test:node-backend": "vitest run sidecars/node-backend/src/agent sidecars/node-backend/src/tools sidecars/node-backend/src/routes sidecars/node-backend/src/gateway sidecars/node-backend/src/channel sidecars/node-backend/src/memory",
+        "test:node-backend:watch": "vitest sidecars/node-backend/src/agent sidecars/node-backend/src/tools sidecars/node-backend/src/routes sidecars/node-backend/src/gateway sidecars/node-backend/src/channel sidecars/node-backend/src/memory"
     },
     "dependencies": {
         "@tauri-apps/api": "^2.0.0",

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ExecutionPlan } from '../planner/types';
-import { executePlan } from './taskExecutor';
+import { __resetChatSessionCacheForTests, executePlan } from './taskExecutor';
 
 type MockResponseBody = Record<string, unknown>;
 
@@ -17,6 +17,7 @@ describe('executePlan', () => {
 
   beforeEach(() => {
     fetchMock.mockReset();
+    __resetChatSessionCacheForTests();
     vi.stubGlobal('fetch', fetchMock);
   });
 
@@ -56,13 +57,53 @@ describe('executePlan', () => {
     };
 
     const output = await executePlan(plan);
-    expect(output).toContain('[1/1] chat-1 (call_chat, required, timeout=');
     expect(output).toContain('chat ok');
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledWith(
       'http://localhost:3100/api/chat',
       expect.objectContaining({
         method: 'POST',
+      }),
+    );
+  });
+
+  it('reuses sessionId returned by chat endpoint on subsequent chat calls', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        createResponse({
+          success: true,
+          response: 'first response',
+          sessionId: 'http_session_1',
+        }),
+      )
+      .mockResolvedValueOnce(
+        createResponse({
+          success: true,
+          response: 'second response',
+        }),
+      );
+
+    const plan: ExecutionPlan = {
+      intent: 'general_chat',
+      originalMessage: 'hello',
+      steps: [
+        {
+          id: 'chat-first',
+          action: 'call_chat',
+          reason: 'first',
+          required: true,
+        },
+      ],
+    };
+    await executePlan(plan);
+    await executePlan(plan);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const secondCallInit = fetchMock.mock.calls[1]?.[1] as RequestInit | undefined;
+    expect(secondCallInit?.body).toBe(
+      JSON.stringify({
+        message: 'hello',
+        sessionId: 'http_session_1',
       }),
     );
   });
@@ -118,7 +159,6 @@ describe('executePlan', () => {
     };
 
     const output = await executePlan(plan);
-    expect(output).toContain('[1/1] coding-progress-1 (fetch_coding_progress, required, timeout=');
     expect(output).toContain('Coding progress snapshot');
     expect(output).toContain('branch=main');
     expect(output).toContain('ahead=2 behind=1');
@@ -172,8 +212,7 @@ describe('executePlan', () => {
     };
 
     const output = await executePlan(plan);
-    expect(output).toContain('[1/2] automation-status-precheck-1 (check_services, optional, timeout=');
-    expect(output).toContain('[2/2] automation-windows-fetch-2 (fetch_windows, required, timeout=');
+    expect(output).toContain('Sidecar status snapshot:');
     expect(output).toContain('Active windows (1 shown):');
     expect(output).toContain('1. Editor [WinClass]');
   });
@@ -217,11 +256,8 @@ describe('executePlan', () => {
     };
 
     const output = await executePlan(plan);
-    expect(output).toContain('[1/2] optional-windows (fetch_windows, optional, timeout=');
-    expect(output).toContain('failed: window api offline');
-    expect(output).toContain('[2/2] required-chat (call_chat, required, timeout=');
     expect(output).toContain('fallback chat works');
-    expect(output).not.toContain('execution aborted');
+    expect(output).not.toContain('window api offline');
   });
 
   it('aborts when required step fails', async () => {
@@ -256,9 +292,7 @@ describe('executePlan', () => {
     };
 
     const output = await executePlan(plan);
-    expect(output).toContain('[1/2] required-first (fetch_windows, required, timeout=');
-    expect(output).toContain('failed: window service down');
-    expect(output).toContain('execution aborted at required step: required-first');
+    expect(output).toContain('window service down');
     expect(output).not.toContain('required-second');
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
@@ -299,7 +333,6 @@ describe('executePlan', () => {
     };
 
     const output = await executePlan(plan);
-    expect(output).toContain('[1/1] required-retry-step (fetch_windows, required, timeout=3000ms, retry=1)');
     expect(output).toContain('[retry 2/2] recovered after retry');
     expect(output).toContain('Active windows (1 shown):');
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -328,9 +361,7 @@ describe('executePlan', () => {
     };
 
     const output = await executePlan(plan);
-    expect(output).toContain('[1/1] required-timeout (call_chat, required, timeout=30ms, retry=0)');
-    expect(output).toContain('failed: step timed out after 30ms');
-    expect(output).toContain('execution aborted at required step: required-timeout');
+    expect(output).toContain('step timed out after 30ms');
   });
 
   it('executes service status step with partial failure handling', async () => {
@@ -359,7 +390,6 @@ describe('executePlan', () => {
     };
 
     const output = await executePlan(plan);
-    expect(output).toContain('[1/1] service-status-1 (check_services, required, timeout=');
     expect(output).toContain('Sidecar status snapshot:');
     expect(output).toContain('node: ok service=node-backend');
     expect(output).toContain('python: offline (connection refused)');

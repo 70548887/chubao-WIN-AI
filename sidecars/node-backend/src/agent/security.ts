@@ -103,7 +103,7 @@ function normalizeMode(raw: string | undefined): SecurityMode {
   if (value === 'enforce' || value === 'strict') {
     return 'enforce';
   }
-  return 'warn';
+  return 'enforce';
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

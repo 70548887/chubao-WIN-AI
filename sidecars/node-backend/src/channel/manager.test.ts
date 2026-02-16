@@ -138,6 +138,10 @@ describe('ChannelManager', () => {
     const plugin1 = new MockPlugin('channel1', 'Channel 1');
     const plugin2 = new MockPlugin('channel2', 'Channel 2');
 
+    // Set owner chat IDs for broadcast
+    plugin1.setOwnerChatId('owner1');
+    plugin2.setOwnerChatId('owner2');
+
     manager.register(plugin1, { id: 'channel1', name: 'Channel 1', enabled: true });
     manager.register(plugin2, { id: 'channel2', name: 'Channel 2', enabled: true });
     await manager.startAll();
@@ -157,7 +161,7 @@ describe('ChannelManager', () => {
       text: 'Hello',
     };
 
-    await expect(manager.sendMessage(msg)).rejects.toThrow('Channel "non-existent" not found');
+    await expect(manager.sendMessage(msg)).rejects.toThrow('Channel "non-existent" not registered');
   });
 
   it('should return error for unhealthy channel', async () => {
@@ -248,6 +252,7 @@ describe('ChannelManager', () => {
 
   it('should handle broadcast with options', async () => {
     const plugin = new MockPlugin('telegram', 'Telegram');
+    plugin.setOwnerChatId('owner-123');
     manager.register(plugin, { id: 'telegram', name: 'Telegram', enabled: true });
     await manager.startAll();
 

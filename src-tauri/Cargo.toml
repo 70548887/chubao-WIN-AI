@@ -21,3 +21,11 @@ env_logger = "0.11"
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
+
+# 低内存构建优化 (7.8GB RAM)
+[profile.release]
+codegen-units = 1
+lto = false
+opt-level = "s"
+strip = true
+panic = "abort"

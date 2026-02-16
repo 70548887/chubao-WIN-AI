@@ -45,7 +45,19 @@
         "displayLanguageSelector": true
       }
     },
-    "externalBin": []
+    "externalBin": [],
+    "resources": {
+      "resources/node-sidecar/node.exe": "resources/node-sidecar/node.exe",
+      "resources/node-sidecar/node-backend.cjs": "resources/node-sidecar/node-backend.cjs",
+      "resources/node-sidecar/node_modules/better-sqlite3/package.json": "resources/node-sidecar/node_modules/better-sqlite3/package.json",
+      "resources/node-sidecar/node_modules/better-sqlite3/build/Release/better_sqlite3.node": "resources/node-sidecar/node_modules/better-sqlite3/build/Release/better_sqlite3.node",
+      "resources/node-sidecar/node_modules/better-sqlite3/lib/*": "resources/node-sidecar/node_modules/better-sqlite3/lib/",
+      "resources/node-sidecar/node_modules/bindings/bindings.js": "resources/node-sidecar/node_modules/bindings/bindings.js",
+      "resources/node-sidecar/node_modules/bindings/package.json": "resources/node-sidecar/node_modules/bindings/package.json",
+      "resources/node-sidecar/node_modules/file-uri-to-path/index.js": "resources/node-sidecar/node_modules/file-uri-to-path/index.js",
+      "resources/node-sidecar/node_modules/file-uri-to-path/package.json": "resources/node-sidecar/node_modules/file-uri-to-path/package.json",
+      "resources/python-sidecar/python-automation.exe": "resources/python-sidecar/python-automation.exe"
+    }
   },
   "plugins": {
     "shell": {

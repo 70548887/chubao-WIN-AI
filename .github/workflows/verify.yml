@@ -8,7 +8,8 @@ on:
       - develop
 
 jobs:
-  verify:
+  build-frontend:
+    name: build-frontend
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -38,12 +39,114 @@ jobs:
       - name: Build frontend
         run: npm run build
 
+  build-node-backend:
+    name: build-node-backend
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: |
+            package-lock.json
+            sidecars/node-backend/package-lock.json
+
+      - name: Install frontend deps
+        run: npm ci
+
+      - name: Install node sidecar deps
+        run: npm ci
+        working-directory: sidecars/node-backend
+
       - name: Build node sidecar
         run: npm run build
         working-directory: sidecars/node-backend
 
-      - name: Python syntax check
-        run: python -m compileall sidecars/python-automation
+  unit-core:
+    name: unit-core
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: |
+            package-lock.json
+            sidecars/node-backend/package-lock.json
+
+      - name: Install frontend deps
+        run: npm ci
+
+      - name: Run frontend core unit tests
+        run: npm run test:core
+
+  unit-node-backend:
+    name: unit-node-backend
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: |
+            package-lock.json
+            sidecars/node-backend/package-lock.json
+
+      - name: Install frontend deps
+        run: npm ci
+
+      - name: Install node sidecar deps
+        run: npm ci
+        working-directory: sidecars/node-backend
+
+      - name: Run node backend unit/integration tests
+        run: npm run test:node-backend
+
+  lint-smoke:
+    name: lint-smoke
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: |
+            package-lock.json
+            sidecars/node-backend/package-lock.json
+
+      - name: Install frontend deps
+        run: npm ci
 
       - name: Contract static verify
         run: npm run verify:static
+
+  python-syntax:
+    name: python-syntax
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Python syntax check
+        run: python -m compileall sidecars/python-automation

@@ -1,0 +1,12 @@
+# Default owner
+* @70548887
+
+# CI and repository policy
+/.github/ @70548887
+/scripts/ @70548887
+
+# Product areas
+/src/ @70548887
+/src-tauri/ @70548887
+/sidecars/ @70548887
+/docs/ @70548887

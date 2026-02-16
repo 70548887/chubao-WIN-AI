@@ -5,6 +5,7 @@ interface ChatApiResponse {
   success: boolean;
   response?: string;
   message?: string;
+  sessionId?: string;
 }
 
 interface WindowInfo {
@@ -23,6 +24,67 @@ interface HealthPayload {
   service?: string;
   version?: string;
   uptimeSec?: number;
+}
+
+const CHAT_SESSION_STORAGE_KEY = 'chubao.chat.sessionId';
+let chatSessionIdCache: string | null = null;
+let chatSessionCacheLoaded = false;
+
+function normalizeChatSessionId(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+  return trimmed.slice(0, 128);
+}
+
+function readSessionIdFromStorage(): string | null {
+  if (typeof window === 'undefined' || !window.localStorage) {
+    return null;
+  }
+  try {
+    return normalizeChatSessionId(window.localStorage.getItem(CHAT_SESSION_STORAGE_KEY));
+  } catch {
+    return null;
+  }
+}
+
+function writeSessionIdToStorage(sessionId: string): void {
+  if (typeof window === 'undefined' || !window.localStorage) {
+    return;
+  }
+  try {
+    window.localStorage.setItem(CHAT_SESSION_STORAGE_KEY, sessionId);
+  } catch {
+    // Ignore storage failures; in-memory fallback remains active for this runtime.
+  }
+}
+
+function getChatSessionId(): string | null {
+  if (chatSessionCacheLoaded) {
+    return chatSessionIdCache;
+  }
+  chatSessionCacheLoaded = true;
+  chatSessionIdCache = readSessionIdFromStorage();
+  return chatSessionIdCache;
+}
+
+function rememberChatSessionId(sessionId: unknown): void {
+  const normalized = normalizeChatSessionId(sessionId);
+  if (!normalized) {
+    return;
+  }
+  chatSessionIdCache = normalized;
+  chatSessionCacheLoaded = true;
+  writeSessionIdToStorage(normalized);
+}
+
+export function __resetChatSessionCacheForTests(): void {
+  chatSessionIdCache = null;
+  chatSessionCacheLoaded = false;
 }
 
 function toErrorMessage(error: unknown, fallback: string): string {
@@ -98,16 +160,23 @@ async function executeServiceStatus(signal: AbortSignal): Promise<string> {
 }
 
 async function executeGeneralChat(message: string, signal: AbortSignal): Promise<string> {
+  const sessionId = getChatSessionId();
+  const requestBody: { message: string; sessionId?: string } = { message };
+  if (sessionId) {
+    requestBody.sessionId = sessionId;
+  }
+
   const response = await fetch('http://localhost:3100/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify(requestBody),
     signal,
   });
   const payload = (await response.json()) as ChatApiResponse;
   if (!response.ok || payload.success !== true || typeof payload.response !== 'string') {
     throw new Error(payload.message ?? `Chat request failed (${response.status})`);
   }
+  rememberChatSessionId(payload.sessionId);
   return payload.response;
 }
 
@@ -123,14 +192,6 @@ async function executeStep(step: PlanStep, originalMessage: string, signal: Abor
     default:
       return executeGeneralChat(originalMessage, signal);
   }
-}
-
-function formatStepResult(step: PlanStep, stepIndex: number, stepTotal: number, content: string): string {
-  const config = readStepConfig(step);
-  return [
-    `[${stepIndex}/${stepTotal}] ${step.id} (${step.action}, ${step.required ? 'required' : 'optional'}, timeout=${config.timeoutMs}ms, retry=${config.retryCount})`,
-    content,
-  ].join('\n');
 }
 
 async function executeStepWithPolicy(step: PlanStep, originalMessage: string): Promise<string> {
@@ -180,14 +241,14 @@ export async function executePlan(plan: ExecutionPlan): Promise<string> {
     const step = plan.steps[index];
     try {
       const content = await executeStepWithPolicy(step, plan.originalMessage);
-      outputs.push(formatStepResult(step, index + 1, total, content));
+      outputs.push(content);
     } catch (error) {
       const errorMessage = toErrorMessage(error, 'step failed');
-      outputs.push(formatStepResult(step, index + 1, total, `failed: ${errorMessage}`));
       if (step.required) {
-        outputs.push(`execution aborted at required step: ${step.id}`);
+        outputs.push(errorMessage);
         break;
       }
+      // Silently skip optional step failures
     }
   }
 

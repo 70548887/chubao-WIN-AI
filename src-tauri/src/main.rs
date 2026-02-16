@@ -13,6 +13,13 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::State;
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
+/// Windows CREATE_NO_WINDOW flag – prevents visible CMD/PowerShell popups.
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
 const LOG_CAPACITY: usize = 500;
 const SUPERVISOR_INTERVAL: Duration = Duration::from_secs(2);
 
@@ -243,12 +250,45 @@ impl ManagedService {
     }
 
     fn build_command(&self) -> Command {
+        // Check if bundled sidecar resources exist (production/installed mode)
+        if let Some(resource_dir) = detect_resource_dir() {
+            match self.kind {
+                ServiceKind::NodeBackend => {
+                    let node_exe = resource_dir
+                        .join("node-sidecar")
+                        .join("node.exe");
+                    let backend_cjs = resource_dir
+                        .join("node-sidecar")
+                        .join("node-backend.cjs");
+                    let mut cmd = Command::new(node_exe);
+                    cmd.arg(backend_cjs);
+                    // Set NODE_PATH so native modules resolve from the bundled node_modules
+                    let node_modules = resource_dir.join("node-sidecar").join("node_modules");
+                    cmd.env("NODE_PATH", &node_modules);
+                    #[cfg(target_os = "windows")]
+                    cmd.creation_flags(CREATE_NO_WINDOW);
+                    return cmd;
+                }
+                ServiceKind::PythonAutomation => {
+                    let py_exe = resource_dir
+                        .join("python-sidecar")
+                        .join("python-automation.exe");
+                    let mut cmd = Command::new(py_exe);
+                    #[cfg(target_os = "windows")]
+                    cmd.creation_flags(CREATE_NO_WINDOW);
+                    return cmd;
+                }
+            }
+        }
+
+        // Fallback: development mode (use npm/python from system PATH)
         match self.kind {
             ServiceKind::NodeBackend => {
                 #[cfg(target_os = "windows")]
                 {
                     let mut cmd = Command::new("cmd");
                     cmd.args(["/C", "npm", "run", "dev"]);
+                    cmd.creation_flags(CREATE_NO_WINDOW);
                     cmd
                 }
                 #[cfg(not(target_os = "windows"))]
@@ -261,6 +301,8 @@ impl ManagedService {
             ServiceKind::PythonAutomation => {
                 let mut cmd = Command::new("python");
                 cmd.arg("main.py");
+                #[cfg(target_os = "windows")]
+                cmd.creation_flags(CREATE_NO_WINDOW);
                 cmd
             }
         }
@@ -356,6 +398,7 @@ impl ManagedService {
                     .args(["/PID", &pid.to_string(), "/T", "/F"])
                     .stdout(Stdio::null())
                     .stderr(Stdio::null())
+                    .creation_flags(CREATE_NO_WINDOW)
                     .status();
             }
             let _ = child.kill();
@@ -547,6 +590,33 @@ fn detect_project_root() -> PathBuf {
         .unwrap_or(manifest_dir)
 }
 
+/// Detect the resource directory for bundled sidecars.
+/// In production (installed mode), the resource dir is next to the executable.
+/// Returns None when running in development mode (sidecars directory exists at project root).
+fn detect_resource_dir() -> Option<PathBuf> {
+    let exe_path = std::env::current_exe().ok()?;
+    let exe_dir = exe_path.parent()?;
+
+    // Check for bundled resources next to the exe (production mode)
+    let resource_dir = exe_dir.join("resources");
+    if resource_dir.join("node-sidecar").join("node.exe").exists()
+        || resource_dir
+            .join("python-sidecar")
+            .join("python-automation.exe")
+            .exists()
+    {
+        return Some(resource_dir);
+    }
+
+    // Tauri resource path: _up_/resources/ on some setups
+    let alt = exe_dir.join("_up_").join("resources");
+    if alt.join("node-sidecar").join("node.exe").exists() {
+        return Some(alt);
+    }
+
+    None
+}
+
 fn spawn_sidecar_supervisor(
     sidecars: Arc<Mutex<SidecarManager>>,
     supervisor_stop: Arc<AtomicBool>,
@@ -636,6 +706,7 @@ fn list_port_occupants(port: u16) -> Vec<PortOccupantPayload> {
             ])
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
+            .creation_flags(CREATE_NO_WINDOW)
             .output();
 
         match output {

@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+
+set -eu
+
+echo "[pre-commit] running secret scan on staged files"
+node ./scripts/secret-scan.mjs --staged

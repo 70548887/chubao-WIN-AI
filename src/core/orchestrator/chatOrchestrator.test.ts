@@ -30,7 +30,6 @@ describe('processUserMessage', () => {
     );
 
     const output = await processUserMessage('hello');
-    expect(output).toContain('[1/1] chat-1 (call_chat, required, timeout=');
     expect(output).toContain('hello from backend');
     expect(fetchMock).toHaveBeenCalledWith(
       'http://localhost:3100/api/chat',
@@ -67,8 +66,7 @@ describe('processUserMessage', () => {
       );
 
     const output = await processUserMessage('list windows');
-    expect(output).toContain('[1/2] automation-status-precheck-1 (check_services, optional, timeout=');
-    expect(output).toContain('[2/2] automation-windows-fetch-2 (fetch_windows, required, timeout=');
+    expect(output).toContain('Sidecar status snapshot:');
     expect(output).toContain('Active windows (1 shown):');
     expect(output).toContain('1. Visual Studio Code [Chrome_WidgetWin_1]');
     expect(fetchMock).toHaveBeenCalledWith(

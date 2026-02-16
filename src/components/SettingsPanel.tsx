@@ -1,11 +1,14 @@
 ﻿import { useMemo } from 'react';
 import { analyzeCodingProgress } from '../skills/coding';
 import CodingProgressSection from './settings/CodingProgressSection';
+import ContinuousDevSection from './settings/ContinuousDevSection';
 import DiagnosticsCompareSection from './settings/DiagnosticsCompareSection';
+import ModelConfigSection from './settings/ModelConfigSection';
 import MultiAgentSection from './settings/MultiAgentSection';
 import ServiceLogsSection from './settings/ServiceLogsSection';
 import ServiceStatusSection from './settings/ServiceStatusSection';
 import { useCodingProgress } from './settings/useCodingProgress';
+import { useContinuousDev } from './settings/useContinuousDev';
 import { useDiagnosticsCompare } from './settings/useDiagnosticsCompare';
 import { useDiagnosticsExport } from './settings/useDiagnosticsExport';
 import { useMultiAgentGroups } from './settings/useMultiAgentGroups';
@@ -70,6 +73,7 @@ function SettingsPanel() {
   } = useCodingProgress();
   const compare = useDiagnosticsCompare({ t });
   const multiAgent = useMultiAgentGroups();
+  const continuousDev = useContinuousDev();
 
   const {
     issueFilter,
@@ -94,6 +98,7 @@ function SettingsPanel() {
   return (
     <div className="panel">
       <h2>{t.settings.title}</h2>
+      <ModelConfigSection />
       <div className="settings-section">
         <h3>{t.settings.apiConfig}</h3>
         <label>
@@ -116,6 +121,18 @@ function SettingsPanel() {
         onCodingMaxFilesChange={setCodingMaxFiles}
         onCodingIncludeUntrackedChange={setCodingIncludeUntracked}
         onLoadCodingProgress={() => void loadCodingProgress()}
+      />
+
+      <ContinuousDevSection
+        monitorState={continuousDev.monitorState}
+        loading={continuousDev.loading}
+        actionBusy={continuousDev.actionBusy}
+        error={continuousDev.error}
+        onLoadStatus={() => void continuousDev.loadStatus()}
+        onStart={async (params) => { await continuousDev.startMonitor(params); }}
+        onStop={async () => { await continuousDev.stopMonitor(); }}
+        onPause={async () => { await continuousDev.pauseMonitor(); }}
+        onResume={async () => { await continuousDev.resumeMonitor(); }}
       />
 
       <MultiAgentSection

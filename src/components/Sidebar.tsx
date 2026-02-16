@@ -1,8 +1,8 @@
 import { useLocale } from '../i18n';
 
 interface SidebarProps {
-  activeTab: 'chat' | 'dashboard' | 'automation' | 'settings';
-  onTabChange: (tab: 'chat' | 'dashboard' | 'automation' | 'settings') => void;
+  activeTab: 'chat' | 'dashboard' | 'automation' | 'skills' | 'settings';
+  onTabChange: (tab: 'chat' | 'dashboard' | 'automation' | 'skills' | 'settings') => void;
 }
 
 function Sidebar({ activeTab, onTabChange }: SidebarProps) {
@@ -38,6 +38,14 @@ function Sidebar({ activeTab, onTabChange }: SidebarProps) {
         >
           <span className="icon">🖥️</span>
           <span className="label">{t.sidebar.automation}</span>
+        </button>
+
+        <button
+          className={`nav-item ${activeTab === 'skills' ? 'active' : ''}`}
+          onClick={() => onTabChange('skills')}
+        >
+          <span className="icon">🧩</span>
+          <span className="label">{t.sidebar.skills}</span>
         </button>
 
         <button

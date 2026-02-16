@@ -5,6 +5,7 @@ export interface Messages {
     chat: string;
     dashboard: string;
     automation: string;
+    skills: string;
     settings: string;
     serviceRunning: string;
     serviceOffline: string;
@@ -60,10 +61,82 @@ export interface Messages {
     fetchError: string;
   };
 
+  skills: {
+    title: string;
+    loading: string;
+    refreshSkills: string;
+    refreshing: string;
+    // Count bar
+    installed: string;
+    totalTools: string;
+    // Action buttons
+    installFromZip: string;
+    importExisting: string;
+    discoverSkills: string;
+    // Install form
+    installSkill: string;
+    installing: string;
+    installPathLabel: string;
+    installPathPlaceholder: string;
+    installSuccess: string;
+    // Empty state
+    noInstalled: string;
+    noInstalledDescription: string;
+    // Skill list
+    skillEnabled: string;
+    skillDisabled: string;
+    skillSource: string;
+    local: string;
+    uninstall: string;
+    uninstallConfirm: string;
+    uninstallSuccess: string;
+    // Config section
+    configSkills: string;
+    enabledLabel: string;
+    capabilitiesLabel: string;
+    automationLabel: string;
+    // Warnings
+    warnings: string;
+    noWarnings: string;
+    // Discovery
+    searchPlaceholder: string;
+    noResults: string;
+    emptyDescription: string;
+    // Import
+    noUnmanagedFound: string;
+    importSuccess: string;
+  };
+
   settings: {
     title: string;
     apiConfig: string;
     anthropicApiKey: string;
+    // Model config
+    modelConfig: string;
+    modelConfigDesc: string;
+    activeProvider: string;
+    modelName: string;
+    baseUrl: string;
+    apiKey: string;
+    apiKeyConfigured: string;
+    apiKeyNotConfigured: string;
+    apiKeyPlaceholder: string;
+    saveConfig: string;
+    saving: string;
+    saved: string;
+    modelConfigRuntimeNotice: string;
+    persistConfig: string;
+    persistingConfig: string;
+    persistedToEnv: string;
+    saveFailed: string;
+    loadingConfig: string;
+    // Claude Code sync
+    claudeCodeSync: string;
+    claudeCodeSyncDesc: string;
+    claudeCodeSyncing: string;
+    claudeCodeSynced: string;
+    claudeCodeNotFound: string;
+    claudeCodeDetected: string;
     // Coding progress
     codingProgress: string;
     sinceDays: string;
@@ -208,6 +281,37 @@ export interface Messages {
     multiAgentCapacityLabel: string;
     multiAgentRunningGroupsLabel: string;
     multiAgentRunningTasksLabel: string;
+    // Continuous Dev Monitor
+    continuousDevTitle: string;
+    continuousDevTaskDescription: string;
+    continuousDevTaskDescriptionPlaceholder: string;
+    continuousDevIntervalSeconds: string;
+    continuousDevMaxCycles: string;
+    continuousDevMaxCyclesHint: string;
+    continuousDevProjectPath: string;
+    continuousDevProjectPathPlaceholder: string;
+    continuousDevWindowTitle: string;
+    continuousDevPauseOnError: string;
+    continuousDevMaxConsecutiveErrors: string;
+    continuousDevStart: string;
+    continuousDevStarting: string;
+    continuousDevStop: string;
+    continuousDevPause: string;
+    continuousDevResume: string;
+    continuousDevStatusIdle: string;
+    continuousDevStatusRunning: string;
+    continuousDevStatusPaused: string;
+    continuousDevStatusStopped: string;
+    continuousDevStatusCompleted: string;
+    continuousDevCycleLabel: string;
+    continuousDevLastScreenshot: string;
+    continuousDevLastAction: string;
+    continuousDevLastState: string;
+    continuousDevConsecutiveErrors: string;
+    continuousDevHistoryTitle: string;
+    continuousDevNoHistory: string;
+    continuousDevStartedAt: string;
+    continuousDevStoppedAt: string;
   };
 
   service: {
