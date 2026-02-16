@@ -6,6 +6,9 @@
  * - OCR text recognition
  * - Screenshot
  * - Window management
+ * 
+ * Note: 新的模块化工具管理器可在 tools/manager/ 中找到
+ * 未来版本将迁移到新的模块化结构
  */
 
 import { z } from 'zod';
