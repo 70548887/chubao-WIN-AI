@@ -25,6 +25,7 @@ const en: Messages = {
     placeholder: 'Type a message... (Enter to send)',
     send: 'Send',
     requestFailed: 'Request failed: ',
+    newConversation: 'New Conversation',
   },
 
   dashboard: {

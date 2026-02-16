@@ -20,6 +20,7 @@ export interface Messages {
     placeholder: string;
     send: string;
     requestFailed: string;
+    newConversation: string;
   };
 
   dashboard: {

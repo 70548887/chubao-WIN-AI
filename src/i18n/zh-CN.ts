@@ -25,6 +25,7 @@ const zhCN: Messages = {
     placeholder: '输入消息... (Enter 发送)',
     send: '发送',
     requestFailed: '请求失败：',
+    newConversation: '新对话',
   },
 
   dashboard: {

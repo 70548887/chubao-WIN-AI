@@ -2224,3 +2224,196 @@ body {
   background: var(--primary);
   color: #fff;
 }
+
+/* 聊天布局 */
+.chat-layout {
+  display: flex;
+  height: 100vh;
+}
+
+/* 对话侧边栏 */
+.conversation-sidebar {
+  width: 260px;
+  background: var(--bg-card);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+}
+
+.new-chat-btn {
+  padding: 12px 16px;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 16px;
+  transition: background 0.2s;
+}
+
+.new-chat-btn:hover {
+  background: var(--primary-dark);
+}
+
+.conversation-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.conversation-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.conversation-item:hover {
+  background: var(--bg-input);
+}
+
+.conversation-item.active {
+  background: var(--primary);
+}
+
+.conversation-title {
+  flex: 1;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.delete-btn {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 4px;
+  opacity: 0;
+  transition: all 0.2s;
+}
+
+.conversation-item:hover .delete-btn {
+  opacity: 1;
+}
+
+.delete-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ef4444;
+}
+
+/* Markdown 渲染样式 */
+.message-content .markdown-body {
+  line-height: 1.6;
+}
+
+.message-content .markdown-body h1,
+.message-content .markdown-body h2,
+.message-content .markdown-body h3,
+.message-content .markdown-body h4,
+.message-content .markdown-body h5,
+.message-content .markdown-body h6 {
+  margin-top: 16px;
+  margin-bottom: 12px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.message-content .markdown-body h1 { font-size: 1.5em; }
+.message-content .markdown-body h2 { font-size: 1.3em; }
+.message-content .markdown-body h3 { font-size: 1.15em; }
+
+.message-content .markdown-body p {
+  margin-bottom: 12px;
+}
+
+.message-content .markdown-body ul,
+.message-content .markdown-body ol {
+  margin-bottom: 12px;
+  padding-left: 24px;
+}
+
+.message-content .markdown-body li {
+  margin-bottom: 4px;
+}
+
+.message-content .markdown-body code {
+  background: rgba(0, 0, 0, 0.2);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: 0.9em;
+}
+
+.message-content .markdown-body pre {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 16px;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin-bottom: 12px;
+}
+
+.message-content .markdown-body pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.message-content .markdown-body blockquote {
+  border-left: 4px solid var(--primary);
+  padding-left: 16px;
+  margin-left: 0;
+  margin-bottom: 12px;
+  color: var(--text-secondary);
+}
+
+.message-content .markdown-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 12px;
+}
+
+.message-content .markdown-body th,
+.message-content .markdown-body td {
+  border: 1px solid var(--border);
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.message-content .markdown-body th {
+  background: var(--bg-input);
+  font-weight: 600;
+}
+
+.message-content .markdown-body a {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.message-content .markdown-body a:hover {
+  text-decoration: underline;
+}
+
+.message-content .markdown-body hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 16px 0;
+}
+
+.message-content .markdown-body img {
+  max-width: 100%;
+  border-radius: 8px;
+}
