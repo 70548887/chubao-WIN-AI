@@ -20,6 +20,8 @@ import {
 import { useSidecarServices } from './settings/useSidecarServices';
 import { useLocale } from '../i18n';
 import type { Messages } from '../i18n';
+import { ThemeToggle } from './ThemeToggle';
+import { ShortcutsPanel } from './ShortcutsPanel';
 import type { IssueFilter } from './settings/serviceIssueTypes';
 function getIssueFilterLabels(t: Messages): Record<IssueFilter, string> {
   return {
@@ -269,6 +271,17 @@ function SettingsPanel() {
         getCompareLineClass={compare.getCompareLineClass}
         compareError={compare.compareError}
       />
+
+      {/* 外观设置 */}
+      <div className="settings-section">
+        <h3>外观设置</h3>
+        <ThemeToggle />
+      </div>
+
+      {/* 快捷键设置 */}
+      <div className="settings-section">
+        <ShortcutsPanel />
+      </div>
     </div>
   );
 }

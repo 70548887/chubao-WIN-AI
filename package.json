@@ -1,6 +1,6 @@
 {
     "name": "chubao-win-ai",
-    "version": "0.1.0",
+    "version": "0.3.0",
     "description": "Windows 本地 AI 自动化控制工具",
     "type": "module",
     "scripts": {
@@ -34,7 +34,11 @@
         "test:e2e:report": "playwright show-report"
     },
     "dependencies": {
+        "@monaco-editor/react": "^4.7.0",
         "@tauri-apps/api": "^2.0.0",
+        "@tauri-apps/plugin-global-shortcut": "^2.3.1",
+        "@tauri-apps/plugin-notification": "^2.3.3",
+        "monaco-editor": "^0.55.1",
         "react": "^18.3.0",
         "react-dom": "^18.3.0",
         "react-markdown": "^10.1.0",

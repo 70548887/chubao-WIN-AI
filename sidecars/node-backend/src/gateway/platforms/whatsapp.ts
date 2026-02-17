@@ -17,6 +17,7 @@
 
 import { AgentRuntime } from '../../agent/runtime.js';
 import { EventEmitter } from 'events';
+import { logger } from '../../utils/logger.js';
 
 interface WhatsAppConfig {
   sessionName?: string;
@@ -107,7 +108,7 @@ export class WhatsAppIntegration extends EventEmitter {
           maxDelay
         );
 
-        console.log(`⚠️ WhatsApp 操作失败 (${attempt + 1}/${maxRetries}), ${delay}ms 后重试...`);
+        logger.warn(`⚠️ WhatsApp 操作失败 (${attempt + 1}/${maxRetries}), ${delay}ms 后重试...`, { attempt: attempt + 1, maxRetries, delay });
         await this.sleep(delay);
       }
     }
@@ -153,12 +154,12 @@ export class WhatsAppIntegration extends EventEmitter {
    */
   async init(): Promise<void> {
     if (this.isInitializing) {
-      console.log('⚠️ WhatsApp 正在初始化中...');
+      logger.info('⚠️ WhatsApp 正在初始化中...');
       return;
     }
 
     if (this.ready) {
-      console.log('✅ WhatsApp 已就绪');
+      logger.info('✅ WhatsApp 已就绪');
       return;
     }
 
@@ -189,7 +190,7 @@ export class WhatsAppIntegration extends EventEmitter {
       await this.client.initialize();
       
     } catch (error) {
-      console.error('❌ 初始化 WhatsApp 失败:', error);
+      logger.error('❌ 初始化 WhatsApp 失败', error);
       this.isInitializing = false;
       
       // 尝试重连
@@ -218,7 +219,7 @@ export class WhatsAppIntegration extends EventEmitter {
 
       // 设置扫码超时
       this.qrTimeoutTimer = setTimeout(() => {
-        console.log('⏰ QR 码已过期，正在刷新...');
+        logger.info('⏰ QR 码已过期，正在刷新...');
         this.refreshQrCode();
       }, this.config.qrTimeout);
 
@@ -227,7 +228,7 @@ export class WhatsAppIntegration extends EventEmitter {
 
     // 认证成功
     this.client.on('authenticated', () => {
-      console.log('✅ WhatsApp 认证成功');
+      logger.info('✅ WhatsApp 认证成功');
       this.qrCode = null;
       this.lastQrTime = 0;
       this.reconnectAttempts = 0;
@@ -243,7 +244,7 @@ export class WhatsAppIntegration extends EventEmitter {
 
     // 认证失败
     this.client.on('auth_failure', (msg: string) => {
-      console.error('❌ WhatsApp 认证失败:', msg);
+      logger.error('❌ WhatsApp 认证失败', { message: msg });
       this.emit('auth_failure', msg);
       
       // 认证失败，尝试重新初始化
@@ -252,7 +253,7 @@ export class WhatsAppIntegration extends EventEmitter {
 
     // 准备就绪
     this.client.on('ready', () => {
-      console.log('✅ WhatsApp 客户端已就绪');
+      logger.info('✅ WhatsApp 客户端已就绪');
       this.ready = true;
       this.isInitializing = false;
       this.reconnectAttempts = 0;
@@ -273,13 +274,13 @@ export class WhatsAppIntegration extends EventEmitter {
       try {
         await this.handleMessage(msg);
       } catch (error) {
-        console.error('处理 WhatsApp 消息失败:', error);
+        logger.error('处理 WhatsApp 消息失败', error);
       }
     });
 
     // 断开连接
     this.client.on('disconnected', (reason: string) => {
-      console.log('⚠️ WhatsApp 断开连接:', reason);
+      logger.warn('⚠️ WhatsApp 断开连接', { reason });
       this.ready = false;
       this.isInitializing = false;
       this.emit('disconnected', reason);
@@ -290,7 +291,7 @@ export class WhatsAppIntegration extends EventEmitter {
 
     // 状态变化
     this.client.on('change_state', (state: string) => {
-      console.log('📱 WhatsApp 状态变化:', state);
+      logger.info(`📱 WhatsApp 状态变化: ${state}`, { state });
       
       if (state === 'CONFLICT' || state === 'UNLAUNCHED') {
         // 需要重新初始化
@@ -301,7 +302,7 @@ export class WhatsAppIntegration extends EventEmitter {
 
     // 加载事件
     this.client.on('loading_screen', (percent: number, message: string) => {
-      console.log(`⏳ WhatsApp 加载中: ${percent}% - ${message}`);
+      logger.info(`⏳ WhatsApp 加载中: ${percent}% - ${message}`, { percent, message });
     });
   }
 
@@ -313,7 +314,7 @@ export class WhatsAppIntegration extends EventEmitter {
     const timeSinceLastQr = Date.now() - this.lastQrTime;
     
     if (timeSinceLastQr > this.config.qrTimeout * 2) {
-      console.log('🔄 QR 码长时间未扫描，重新初始化客户端...');
+      logger.info('🔄 QR 码长时间未扫描，重新初始化客户端...');
       await this.destroy();
       await this.sleep(2000);
       await this.init();
@@ -329,7 +330,7 @@ export class WhatsAppIntegration extends EventEmitter {
     }
 
     if (this.reconnectAttempts >= this.config.maxReconnectAttempts) {
-      console.error('❌ WhatsApp 重连次数已达上限，停止尝试');
+      logger.error('❌ WhatsApp 重连次数已达上限，停止尝试');
       this.emit('max_reconnect_attempts');
       return;
     }
@@ -340,18 +341,18 @@ export class WhatsAppIntegration extends EventEmitter {
       60000 // 最大 60 秒
     );
 
-    console.log(`🔄 WhatsApp 将在 ${delay}ms 后尝试重连 (${this.reconnectAttempts}/${this.config.maxReconnectAttempts})...`);
+    logger.info(`🔄 WhatsApp 将在 ${delay}ms 后尝试重连 (${this.reconnectAttempts}/${this.config.maxReconnectAttempts})...`);
 
     this.reconnectTimer = setTimeout(async () => {
       try {
         if (!this.ready && !this.isInitializing) {
-          console.log('🔄 正在重连 WhatsApp...');
+          logger.info('🔄 正在重连 WhatsApp...');
           await this.destroy();
           await this.sleep(2000);
           await this.init();
         }
       } catch (error) {
-        console.error('❌ WhatsApp 重连失败:', error);
+        logger.error('❌ WhatsApp 重连失败', error);
         this.scheduleReconnect();
       }
     }, delay);
@@ -366,11 +367,11 @@ export class WhatsAppIntegration extends EventEmitter {
     const contactNumber = contact.number;
     const contactName = contact.pushname || contact.verifiedName || contact.number;
 
-    console.log(`📨 收到 WhatsApp 消息 from ${contactName}: ${msg.body?.substring(0, 50) || '[媒体]'}`);
+    logger.info(`📨 收到 WhatsApp 消息 from ${contactName}: ${msg.body?.substring(0, 50) || '[媒体]'}`, { contactName, contactNumber, messageType: msg.type });
 
     // 检查是否授权
     if (!this.isAuthorized(contactNumber)) {
-      console.log(`⛔ 未授权的用户: ${contactNumber}`);
+      logger.warn(`⛔ 未授权的用户: ${contactNumber}`, { contactNumber });
       await msg.reply('⛔ 抱歉，您没有权限使用此服务。');
       return;
     }
@@ -498,7 +499,7 @@ export class WhatsAppIntegration extends EventEmitter {
           await msg.reply('❓ 未知命令，使用 /help 查看帮助');
       }
     } catch (error) {
-      console.error(`处理命令 /${command} 失败:`, error);
+      logger.error(`处理命令 /${command} 失败`, error);
       await msg.reply('❌ 命令执行失败，请稍后再试');
     }
   }
@@ -510,7 +511,7 @@ export class WhatsAppIntegration extends EventEmitter {
     const chatId = msg.from;
     const sessionId = `whatsapp_${chatId}`;
 
-    console.log(`🤖 处理 WhatsApp 聊天: ${text.substring(0, 50)}...`);
+    logger.info(`🤖 处理 WhatsApp 聊天: ${text.substring(0, 50)}...`, { chatId, messageLength: text.length });
 
     try {
       // 显示"正在输入"
@@ -528,7 +529,7 @@ export class WhatsAppIntegration extends EventEmitter {
       // 发送回复
       await this.withRetry(() => msg.reply(truncatedResponse));
     } catch (error) {
-      console.error('处理 WhatsApp 消息失败:', error);
+      logger.error('处理 WhatsApp 消息失败', error);
       await msg.reply('抱歉，处理消息时出错了，请稍后再试。');
     }
   }
@@ -580,7 +581,7 @@ export class WhatsAppIntegration extends EventEmitter {
           await operation();
           await this.sleep(100); // 避免发送太快
         } catch (error) {
-          console.error('处理消息队列失败:', error);
+          logger.error('处理消息队列失败', error);
         }
       }
     }
@@ -668,7 +669,7 @@ export class WhatsAppIntegration extends EventEmitter {
       try {
         await this.client.destroy();
       } catch (error) {
-        console.error('关闭 WhatsApp 客户端失败:', error);
+        logger.error('关闭 WhatsApp 客户端失败', error);
       }
       this.client = null;
     }
@@ -677,6 +678,6 @@ export class WhatsAppIntegration extends EventEmitter {
     this.isInitializing = false;
     this.qrCode = null;
     
-    console.log('👋 WhatsApp 客户端已关闭');
+    logger.info('👋 WhatsApp 客户端已关闭');
   }
 }

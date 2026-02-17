@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Chubao AI",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "identifier": "com.chubao.win-ai",
   "build": {
     "beforeDevCommand": "npm run dev",

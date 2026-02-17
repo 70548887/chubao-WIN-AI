@@ -1,7 +1,8 @@
 import { installSkillFromPath, loadSkillToolsFromRegistry } from './skillRegistry.js';
+import { logger } from '../utils/logger.js';
 
 function printUsage(): void {
-  console.log('Usage: npm run skill:install -- <path-to-skill-dir-or-skill.json>');
+  logger.info('Usage: npm run skill:install -- <path-to-skill-dir-or-skill.json>');
 }
 
 async function main(): Promise<void> {
@@ -17,23 +18,23 @@ async function main(): Promise<void> {
   const loadedEntry = loaded.entries.find((entry) => entry.manifest.id === manifest.id);
   const loadedTools = loadedEntry?.tools.map((tool) => tool.name) ?? [];
 
-  console.log('Skill installed successfully.');
-  console.log(`- id: ${manifest.id}`);
-  console.log(`- name: ${manifest.name}`);
-  console.log(`- version: ${manifest.version}`);
-  console.log(`- enabled: ${manifest.enabled}`);
-  console.log(`- module: ${manifest.module}`);
-  console.log(`- loaded tools: ${loadedTools.length > 0 ? loadedTools.join(', ') : '(none)'}`);
+  logger.info('Skill installed successfully.');
+  logger.info(`- id: ${manifest.id}`);
+  logger.info(`- name: ${manifest.name}`);
+  logger.info(`- version: ${manifest.version}`);
+  logger.info(`- enabled: ${manifest.enabled}`);
+  logger.info(`- module: ${manifest.module}`);
+  logger.info(`- loaded tools: ${loadedTools.length > 0 ? loadedTools.join(', ') : '(none)'}`);
 
   if (loaded.warnings.length > 0) {
-    console.log('Warnings:');
+    logger.warn('Warnings:');
     loaded.warnings.forEach((warning) => {
-      console.log(`- ${warning}`);
+      logger.warn(`- ${warning}`);
     });
   }
 }
 
 main().catch((error) => {
-  console.error('Skill install failed:', error instanceof Error ? error.message : String(error));
+  logger.error('Skill install failed', { error: error instanceof Error ? error.message : String(error) });
   process.exitCode = 1;
 });

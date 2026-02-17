@@ -4,6 +4,7 @@ import * as fsSync from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { promisify } from 'node:util';
+import { logger } from '../utils/logger.js';
 
 const execFileAsync = promisify(execFile);
 const DEFAULT_TIMEOUT_MS = 15 * 60 * 1000;
@@ -254,10 +255,7 @@ function loadPersistedOpenCodeTasksIfNeeded(): void {
       opencodeTasks.set(task.id, task);
     }
   } catch (error) {
-    console.warn(
-      'Failed to load persisted OpenCode tasks:',
-      error instanceof Error ? error.message : String(error),
-    );
+    logger.warn('Failed to load persisted OpenCode tasks', { error: error instanceof Error ? error.message : String(error) });
   }
 }
 
@@ -293,10 +291,7 @@ function persistOpenCodeTasks(): void {
 
     fsSync.writeFileSync(OPENCODE_TASK_STATE_PATH, JSON.stringify(payload, null, 2), 'utf8');
   } catch (error) {
-    console.warn(
-      'Failed to persist OpenCode tasks:',
-      error instanceof Error ? error.message : String(error),
-    );
+    logger.warn('Failed to persist OpenCode tasks', { error: error instanceof Error ? error.message : String(error) });
   }
 }
 

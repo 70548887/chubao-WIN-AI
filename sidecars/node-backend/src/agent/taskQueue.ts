@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import * as fsSync from 'node:fs';
 import * as path from 'node:path';
+import { logger } from '../utils/logger.js';
 
 export type QueueTaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'canceled';
 export type QueueTaskListStatus = QueueTaskStatus | 'all';
@@ -447,10 +448,7 @@ export class TaskQueue {
       this.cleanupTasks();
       this.persistState();
     } catch (error) {
-      console.warn(
-        'Failed to load persisted task queue:',
-        error instanceof Error ? error.message : String(error),
-      );
+      logger.warn('Failed to load persisted task queue', { error: error instanceof Error ? error.message : String(error) });
     }
   }
 
@@ -522,10 +520,7 @@ export class TaskQueue {
       };
       fsSync.writeFileSync(this.statePath, JSON.stringify(payload, null, 2), 'utf8');
     } catch (error) {
-      console.warn(
-        'Failed to persist task queue state:',
-        error instanceof Error ? error.message : String(error),
-      );
+      logger.warn('Failed to persist task queue state', { error: error instanceof Error ? error.message : String(error) });
     }
   }
 }

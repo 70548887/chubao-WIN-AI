@@ -1,8 +1,9 @@
 import { useLocale } from '../i18n';
+import { NotificationCenter } from './NotificationCenter';
 
 interface SidebarProps {
-  activeTab: 'chat' | 'dashboard' | 'automation' | 'skills' | 'settings';
-  onTabChange: (tab: 'chat' | 'dashboard' | 'automation' | 'skills' | 'settings') => void;
+  activeTab: 'chat' | 'dashboard' | 'automation' | 'skills' | 'settings' | 'plugins' | 'platforms';
+  onTabChange: (tab: 'chat' | 'dashboard' | 'automation' | 'skills' | 'settings' | 'plugins' | 'platforms') => void;
 }
 
 function Sidebar({ activeTab, onTabChange }: SidebarProps) {
@@ -55,9 +56,26 @@ function Sidebar({ activeTab, onTabChange }: SidebarProps) {
           <span className="icon">⚙️</span>
           <span className="label">{t.sidebar.settings}</span>
         </button>
+
+        <button
+          className={`nav-item ${activeTab === 'plugins' ? 'active' : ''}`}
+          onClick={() => onTabChange('plugins')}
+        >
+          <span className="icon">🔌</span>
+          <span className="label">插件</span>
+        </button>
+
+        <button
+          className={`nav-item ${activeTab === 'platforms' ? 'active' : ''}`}
+          onClick={() => onTabChange('platforms')}
+        >
+          <span className="icon">📱</span>
+          <span className="label">平台</span>
+        </button>
       </div>
 
       <div className="sidebar-footer">
+        <NotificationCenter />
         <button
           className="locale-toggle"
           onClick={() => setLocale(locale === 'zh-CN' ? 'en' : 'zh-CN')}

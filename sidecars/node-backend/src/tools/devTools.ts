@@ -11,6 +11,7 @@ import { execSync } from 'node:child_process';
 import type { Tool } from './index.js';
 import { getEventBus } from '../channel/eventBus.js';
 import type { NotificationEvent } from '../channel/types.js';
+import { logger } from '../utils/logger.js';
 
 // ---------------------------------------------------------------------------
 // Workspace root — defaults to project root
@@ -420,7 +421,7 @@ ${args.content}`;
       await toolManager.forceReloadSkills();
     } catch (reloadErr) {
       // Non-fatal: skill files are created, just reload failed
-      console.warn('Skill reload after creation failed:', reloadErr);
+      logger.warn('Skill reload after creation failed', { error: reloadErr instanceof Error ? reloadErr.message : String(reloadErr) });
     }
 
     return {
@@ -541,11 +542,11 @@ export const restartSidecarTool: Tool = {
     const reason = args.reason || 'Self-upgrade restart';
 
     // Log the restart attempt
-    console.log(`[restart_sidecar] Initiating ${mode} restart in ${delayMs}ms. Reason: ${reason}`);
+    logger.info(`[restart_sidecar] Initiating ${mode} restart`, { mode, delayMs, reason });
 
     // Schedule the restart
     setTimeout(() => {
-      console.log('[restart_sidecar] Executing restart...');
+      logger.info('[restart_sidecar] Executing restart...');
       
       // Find the restart script
       const restartScript = path.join(WORKSPACE_ROOT, 'restart-all.ps1');
@@ -566,10 +567,10 @@ export const restartSidecarTool: Tool = {
           child.unref();
           
           // Exit current process
-          console.log('[restart_sidecar] New process spawned, exiting...');
+          logger.info('[restart_sidecar] New process spawned, exiting...');
           process.exit(0);
         } catch (error) {
-          console.error('[restart_sidecar] Failed to spawn restart:', error);
+          logger.error('[restart_sidecar] Failed to spawn restart', error);
           return { error: `Failed to restart: ${error}` };
         }
       } else if (fs.existsSync(startScript)) {
@@ -587,10 +588,10 @@ export const restartSidecarTool: Tool = {
           });
           child.unref();
           
-          console.log('[restart_sidecar] New node process spawned, exiting...');
+          logger.info('[restart_sidecar] New node process spawned, exiting...');
           process.exit(0);
         } catch (error) {
-          console.error('[restart_sidecar] Failed to restart node:', error);
+          logger.error('[restart_sidecar] Failed to restart node', error);
           return { error: `Failed to restart: ${error}` };
         }
       } else {
@@ -878,7 +879,7 @@ function saveSelfUpgradeLog(entries: SelfUpgradeEntry[]): void {
     const trimmed = entries.slice(-100);
     fs.writeFileSync(SELF_UPGRADE_LOG_PATH, JSON.stringify(trimmed, null, 2), 'utf-8');
   } catch (error) {
-    console.warn('Failed to save self-upgrade log:', error);
+    logger.warn('Failed to save self-upgrade log', { error: error instanceof Error ? error.message : String(error) });
   }
 }
 

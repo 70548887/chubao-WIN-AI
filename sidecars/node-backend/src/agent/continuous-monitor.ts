@@ -8,6 +8,7 @@
 import * as fsSync from 'node:fs';
 import * as path from 'node:path';
 import type { AgentRuntime } from './runtime.js';
+import { logger } from '../utils/logger.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -178,7 +179,7 @@ export class ContinuousDevMonitor {
     this.running = true;
     this.persistState();
 
-    console.log(`[ContinuousDevMonitor] Started - interval=${mergedConfig.intervalSeconds}s, task="${mergedConfig.taskDescription}"`);
+    logger.info(`[ContinuousDevMonitor] Started - interval=${mergedConfig.intervalSeconds}s, task="${mergedConfig.taskDescription}"`, { interval: mergedConfig.intervalSeconds, task: mergedConfig.taskDescription });
 
     // Run first cycle immediately, then schedule
     void this.runLoop(mergedConfig);
@@ -193,7 +194,7 @@ export class ContinuousDevMonitor {
     this.state.status = 'stopped';
     this.state.stoppedAt = new Date().toISOString();
     this.persistState();
-    console.log('[ContinuousDevMonitor] Stopped');
+    logger.info('[ContinuousDevMonitor] Stopped');
   }
 
   async pause(): Promise<void> {
@@ -207,7 +208,7 @@ export class ContinuousDevMonitor {
     }
     this.state.status = 'paused';
     this.persistState();
-    console.log('[ContinuousDevMonitor] Paused');
+    logger.info('[ContinuousDevMonitor] Paused');
   }
 
   async resume(): Promise<void> {
@@ -220,7 +221,7 @@ export class ContinuousDevMonitor {
     this.running = true;
     this.state.status = 'running';
     this.persistState();
-    console.log('[ContinuousDevMonitor] Resumed');
+    logger.info('[ContinuousDevMonitor] Resumed');
     void this.runLoop(this.state.config);
   }
 
@@ -238,7 +239,7 @@ export class ContinuousDevMonitor {
         await this.runCycle(config);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        console.error(`[ContinuousDevMonitor] Cycle ${this.state.currentCycle} error:`, errorMessage);
+        logger.error(`[ContinuousDevMonitor] Cycle ${this.state.currentCycle} error`, error);
 
         this.state.consecutiveErrors++;
         this.addHistory({
@@ -251,7 +252,7 @@ export class ContinuousDevMonitor {
         });
 
         if (config.pauseOnError && this.state.consecutiveErrors >= config.maxConsecutiveErrors) {
-          console.warn(`[ContinuousDevMonitor] Paused after ${this.state.consecutiveErrors} consecutive errors`);
+          logger.warn(`[ContinuousDevMonitor] Paused after ${this.state.consecutiveErrors} consecutive errors`, { consecutiveErrors: this.state.consecutiveErrors });
           this.state.status = 'paused';
           this.running = false;
           this.persistState();
@@ -261,7 +262,7 @@ export class ContinuousDevMonitor {
 
       // Check max cycles
       if (config.maxCycles > 0 && this.state.currentCycle >= config.maxCycles) {
-        console.log(`[ContinuousDevMonitor] Completed ${config.maxCycles} cycles`);
+        logger.info(`[ContinuousDevMonitor] Completed ${config.maxCycles} cycles`, { cycles: config.maxCycles });
         this.state.status = 'completed';
         this.state.stoppedAt = new Date().toISOString();
         this.running = false;
@@ -280,7 +281,7 @@ export class ContinuousDevMonitor {
 
   private async runCycle(config: MonitorConfig): Promise<void> {
     this.state.currentCycle++;
-    console.log(`[ContinuousDevMonitor] Cycle #${this.state.currentCycle} starting...`);
+    logger.info(`[ContinuousDevMonitor] Cycle #${this.state.currentCycle} starting...`, { cycle: this.state.currentCycle });
 
     const systemPrompt = buildMonitorSystemPrompt(config, this.state.currentCycle);
 
@@ -325,7 +326,7 @@ ${userMessage}`,
     });
 
     this.persistState();
-    console.log(`[ContinuousDevMonitor] Cycle #${this.state.currentCycle} done - state=${detectedState}, action="${action}"`);
+    logger.info(`[ContinuousDevMonitor] Cycle #${this.state.currentCycle} done - state=${detectedState}, action="${action}"`, { cycle: this.state.currentCycle, state: detectedState, action });
   }
 
   // -------------------------------------------------------------------------
@@ -430,10 +431,7 @@ ${userMessage}`,
 
       fsSync.writeFileSync(this.statePath, JSON.stringify(payload, null, 2), 'utf8');
     } catch (error) {
-      console.warn(
-        '[ContinuousDevMonitor] Failed to persist state:',
-        error instanceof Error ? error.message : String(error),
-      );
+      logger.warn('[ContinuousDevMonitor] Failed to persist state', { error: error instanceof Error ? error.message : String(error) });
     }
   }
 
@@ -477,13 +475,10 @@ ${userMessage}`,
       };
 
       if (recoveredStatus === 'paused' && s.status === 'running') {
-        console.log('[ContinuousDevMonitor] Recovered from running state → paused (restart required)');
+        logger.info('[ContinuousDevMonitor] Recovered from running state → paused (restart required)');
       }
     } catch (error) {
-      console.warn(
-        '[ContinuousDevMonitor] Failed to load persisted state:',
-        error instanceof Error ? error.message : String(error),
-      );
+      logger.warn('[ContinuousDevMonitor] Failed to load persisted state', { error: error instanceof Error ? error.message : String(error) });
     }
   }
 }

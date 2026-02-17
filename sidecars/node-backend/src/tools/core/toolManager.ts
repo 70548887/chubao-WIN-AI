@@ -9,6 +9,7 @@ import {
 import { SandboxManager } from './sandbox.js';
 import { zodToJsonSchema, getRequiredParams } from '../utils/schema.js';
 import { getCliHealth } from '../utils/cliHealth.js';
+import { logger } from '../../utils/logger.js';
 import type { Tool, ToolSandboxPolicy, CliHealthSnapshot } from './types.js';
 
 export class ToolManager {
@@ -50,7 +51,7 @@ export class ToolManager {
     this.skillsInitializing = null;
     await this.reloadSkills();
     this.skillsInitialized = true;
-    console.log(`🔄 Skills reloaded: ${this.skillToolNames.size} skill tools active`);
+    logger.info(`Skills reloaded: ${this.skillToolNames.size} skill tools active`, { skillCount: this.skillToolNames.size });
   }
 
   async installSkill(skillPath: string): Promise<{

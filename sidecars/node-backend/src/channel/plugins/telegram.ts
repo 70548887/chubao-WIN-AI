@@ -17,6 +17,7 @@ import { message } from 'telegraf/filters';
 import { randomUUID } from 'node:crypto';
 import type { AgentRuntime } from '../../agent/runtime.js';
 import type { ChannelEventBus } from '../eventBus.js';
+import { logger } from '../../utils/logger.js';
 import type {
   IChannelPlugin,
   ChannelPluginCapabilities,
@@ -96,10 +97,10 @@ export class TelegramPlugin implements IChannelPlugin {
         await this.bot.launch({
           webhook: { domain: this.config.webhookUrl, port: 0 },
         });
-        console.log(`🚀 [Telegram] 已启动 (Webhook): ${this.config.webhookUrl}`);
+        logger.info(`[Telegram] 已启动 (Webhook): ${this.config.webhookUrl}`);
       } else {
         await this.bot.launch({ dropPendingUpdates: true });
-        console.log('🚀 [Telegram] 已启动 (Long polling)');
+        logger.info('[Telegram] 已启动 (Long polling)');
       }
 
       this.state = 'running';
@@ -419,7 +420,7 @@ export class TelegramPlugin implements IChannelPlugin {
     });
 
     const sessionId = `telegram_${userId}`;
-    console.log(`📨 [Telegram] 收到: ${text.substring(0, 50)}...`);
+    logger.info(`[Telegram] 收到: ${text.substring(0, 50)}...`);
 
     try {
       await this.withRetry(() => ctx.sendChatAction('typing'));
@@ -450,7 +451,7 @@ export class TelegramPlugin implements IChannelPlugin {
 
       this.lastOutboundAt = Date.now();
     } catch (err) {
-      console.error('[Telegram] 处理消息失败:', err);
+      logger.error('[Telegram] 处理消息失败', err);
 
       // Fallback: try plain text reply if Markdown failed
       try {
@@ -468,7 +469,7 @@ export class TelegramPlugin implements IChannelPlugin {
   private setupErrorHandler(): void {
     this.bot.catch(async (err: unknown, ctx: Context) => {
       const errMsg = err instanceof Error ? err.message : String(err);
-      console.error('[Telegram] Bot 错误:', errMsg);
+      logger.error('[Telegram] Bot 错误', err);
       this.lastError = errMsg;
 
       // Emit error to EventBus
@@ -500,7 +501,7 @@ export class TelegramPlugin implements IChannelPlugin {
   private trackOwnerChat(ctx: Context): void {
     if (!this.ownerChatId && ctx.chat?.id) {
       this.ownerChatId = String(ctx.chat.id);
-      console.log(`[Telegram] Owner chat tracked: ${this.ownerChatId}`);
+      logger.info(`[Telegram] Owner chat tracked: ${this.ownerChatId}`);
     }
   }
 

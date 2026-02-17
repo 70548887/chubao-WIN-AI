@@ -14,6 +14,7 @@
 
 import { EventEmitter } from 'node:events';
 import type { ChannelEventMap, EventPayload } from './types.js';
+import { logger } from '../utils/logger.js';
 
 type EventName = keyof ChannelEventMap;
 type WildcardListener = (eventName: EventName, payload: unknown) => void;
@@ -55,7 +56,7 @@ export class ChannelEventBus {
     try {
       this.emitter.emit(event, payload);
     } catch (err) {
-      console.error(`[EventBus] Listener error on "${event}":`, err);
+      logger.error(`[EventBus] Listener error on "${event}"`, err);
     }
 
     // Emit to wildcard listeners
@@ -63,7 +64,7 @@ export class ChannelEventBus {
       try {
         listener(event, payload);
       } catch (err) {
-        console.error(`[EventBus] Wildcard listener error on "${event}":`, err);
+        logger.error(`[EventBus] Wildcard listener error on "${event}"`, err);
       }
     }
   }
@@ -80,7 +81,7 @@ export class ChannelEventBus {
       try {
         listener(payload as EventPayload<K>);
       } catch (err) {
-        console.error(`[EventBus] Listener error on "${event}":`, err);
+        logger.error(`[EventBus] Listener error on "${event}"`, err);
       }
     };
 
@@ -102,7 +103,7 @@ export class ChannelEventBus {
       try {
         listener(payload as EventPayload<K>);
       } catch (err) {
-        console.error(`[EventBus] Once listener error on "${event}":`, err);
+        logger.error(`[EventBus] Once listener error on "${event}"`, err);
       }
     };
 

@@ -9,6 +9,7 @@ import { MemoryManager } from '../memory/manager.js';
 import { ToolManager, toolManager } from '../tools/index.js';
 import { ToolSecurityGuard, type ToolSecurityPolicy } from './security.js';
 import { performanceMonitor } from '../monitoring/performance.js';
+import { logger } from '../utils/logger.js';
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import * as fsSync from 'node:fs';
@@ -449,10 +450,7 @@ class AgentSessionStore {
 
       this.cleanupSessions();
     } catch (error) {
-      console.warn(
-        'Failed to load persisted agent sessions:',
-        error instanceof Error ? error.message : String(error),
-      );
+      logger.warn('Failed to load persisted agent sessions', { error: error instanceof Error ? error.message : String(error) });
     }
   }
 
@@ -527,10 +525,7 @@ class AgentSessionStore {
 
       fsSync.writeFileSync(this.statePath, JSON.stringify(payload, null, 2), 'utf8');
     } catch (error) {
-      console.warn(
-        'Failed to persist agent sessions:',
-        error instanceof Error ? error.message : String(error),
-      );
+      logger.warn('Failed to persist agent sessions', { error: error instanceof Error ? error.message : String(error) });
     }
   }
 }
@@ -584,7 +579,7 @@ export class AgentRuntime {
     this.securityGuard = new ToolSecurityGuard();
     this.sessionStore = new AgentSessionStore();
     this.toolManager.initializeSkills().catch((error) => {
-      console.warn('Skill tools preload failed:', (error as Error).message);
+      logger.warn('Skill tools preload failed', { error: (error as Error).message });
     });
 
     // Determine provider
@@ -663,8 +658,14 @@ export class AgentRuntime {
           ? this.krioModelName
           : this.openaiModelName;
 
-    console.log(`\u{1F916} AI Provider: ${this.provider}, Model: ${this.modelName}`);
-    console.log(`   OpenAI: ${this.openaiModelName}, Anthropic: ${this.anthropicModelName}, OhMyGPT: ${this.ohmygptModelName}, Krio: ${this.krioModelName}`);
+    logger.info(`AI Provider: ${this.provider}, Model: ${this.modelName}`, {
+      provider: this.provider,
+      model: this.modelName,
+      openai: this.openaiModelName,
+      anthropic: this.anthropicModelName,
+      ohmygpt: this.ohmygptModelName,
+      krio: this.krioModelName,
+    });
   }
 
   async chat(message: string, sessionId?: string): Promise<string> {
@@ -677,11 +678,15 @@ export class AgentRuntime {
       return await this.chatByProvider(primary, message, sessionId);
     } catch (primaryError) {
       for (const fallback of fallbacks) {
-        console.warn(`Primary provider (${primary}) failed: ${(primaryError as Error).message}, trying ${fallback} (simple mode)...`);
+        logger.warn(`Primary provider (${primary}) failed, trying ${fallback} (simple mode)...`, {
+          primary,
+          fallback,
+          error: (primaryError as Error).message,
+        });
         try {
           return await this.chatSimpleByProvider(fallback, message, sessionId);
         } catch (fallbackError) {
-          console.warn(`Fallback provider (${fallback}) also failed:`, (fallbackError as Error).message);
+          logger.warn(`Fallback provider (${fallback}) also failed`, { error: (fallbackError as Error).message });
         }
       }
       return `处理消息时出错: ${(primaryError as Error).message}`;
@@ -707,7 +712,7 @@ export class AgentRuntime {
       if (!this.openaiApiKey) throw new Error('No OPENAI_API_KEY for fallback');
       
       const fallbackMaxTokens = 256;
-      console.warn(`⚠️ Using OpenAI fallback with max_tokens=${fallbackMaxTokens}`);
+      logger.warn(`Using OpenAI fallback with max_tokens=${fallbackMaxTokens}`, { provider: 'openai', maxTokens: fallbackMaxTokens });
       
       const response = await callResponsesAPI(this.openaiBaseURL, this.openaiApiKey, {
         model: this.openaiModelName,
@@ -733,7 +738,7 @@ export class AgentRuntime {
       if (!this.ohmygptApiKey) throw new Error('No OHMYGPT_API_KEY for fallback');
       
       const fallbackMaxTokens = 256;
-      console.warn(`⚠️ Using OhMyGPT fallback with max_tokens=${fallbackMaxTokens}`);
+      logger.warn(`Using OhMyGPT fallback with max_tokens=${fallbackMaxTokens}`, { provider: 'ohmygpt', maxTokens: fallbackMaxTokens });
       
       const response = await callResponsesAPI(this.ohmygptBaseURL, this.ohmygptApiKey, {
         model: this.ohmygptModelName,
@@ -759,7 +764,7 @@ export class AgentRuntime {
       if (!this.krioApiKey) throw new Error('No KRIO_API_KEY for fallback');
       
       const fallbackMaxTokens = 256;
-      console.warn(`\u26a0\ufe0f Using Krio fallback with max_tokens=${fallbackMaxTokens}`);
+      logger.warn(`Using Krio fallback with max_tokens=${fallbackMaxTokens}`, { provider: 'krio', maxTokens: fallbackMaxTokens });
       
       const response = await callAnthropicMessagesAPI(this.krioBaseURL, this.krioApiKey, {
         model: this.krioModelName,
@@ -776,7 +781,7 @@ export class AgentRuntime {
     
     // Use very small token limit for fallback to avoid 402 errors
     const fallbackMaxTokens = 128;
-    console.warn(`⚠️ Using Anthropic fallback with max_tokens=${fallbackMaxTokens}`);
+    logger.warn(`Using Anthropic fallback with max_tokens=${fallbackMaxTokens}`, { provider: 'anthropic', maxTokens: fallbackMaxTokens });
     
     const response = await this.anthropicClient.messages.create({
       model: this.anthropicModelName,
@@ -865,7 +870,13 @@ export class AgentRuntime {
             if (fittingTools.length > 0) {
               params.tools = fittingTools;
               if (fittingTools.length < tools.length) {
-                console.log(`✂️ Trimmed tools: ${fittingTools.length}/${tools.length} (body ${baseSize}+${toolsSize}/${maxBodySize} bytes)`);
+                logger.info(`Trimmed tools: ${fittingTools.length}/${tools.length}`, {
+                  fittingCount: fittingTools.length,
+                  totalCount: tools.length,
+                  baseSize,
+                  toolsSize,
+                  maxBodySize,
+                });
               }
             }
           }
@@ -904,7 +915,7 @@ export class AgentRuntime {
           }
 
           const executionInput = this.adaptToolArgsForExecution(toolName, toolArgs);
-          console.log(`Tool call: ${toolName}`, executionInput);
+          logger.info(`Tool call: ${toolName}`, { tool: toolName, input: executionInput });
 
           try {
             const result = await this.executeTool(toolName, executionInput);
@@ -914,7 +925,7 @@ export class AgentRuntime {
             toolSummaryLines.push(`- ${toolName}: ${content.slice(0, 600)}`);
           } catch (error) {
             const errorMessage = this.getErrorMessage(error);
-            console.error(`Tool execution failed ${toolName}:`, errorMessage);
+            logger.error(`Tool execution failed ${toolName}`, error, { tool: toolName });
             nextInput.push({ type: 'function_call_output', call_id: (fc as any).call_id, output: `tool_error: ${errorMessage}` });
             toolSummaryLines.push(`- ${toolName}: tool_error: ${errorMessage}`);
           }
@@ -943,7 +954,7 @@ export class AgentRuntime {
 
       return finalResponse;
     } catch (error) {
-      console.error('Chat (OpenAI) error:', error);
+      logger.error('Chat (OpenAI) error', error);
       throw error;
     }
   }
@@ -1121,7 +1132,7 @@ export class AgentRuntime {
             if (fittingTools.length > 0) {
               params.tools = fittingTools;
               if (fittingTools.length < tools.length) {
-                console.log(`[${providerLabel}] ✂️ Trimmed tools: ${fittingTools.length}/${tools.length} (body ${baseSize}+${toolsSize}/${maxBodySize} bytes)`);
+                logger.info(`[${providerLabel}] Trimmed tools: ${fittingTools.length}/${tools.length}`, { fittingCount: fittingTools.length, totalCount: tools.length, baseSize, toolsSize, maxBodySize });
               }
             }
           }
@@ -1132,7 +1143,7 @@ export class AgentRuntime {
           response = await callResponsesAPI(baseURL, apiKey, params);
         } catch (apiErr: any) {
           if ((apiErr?.status === 400 || apiErr?.status === 413) && iteration > 0) {
-            console.warn(`[${providerLabel}] API error on iteration ${iteration}, returning last response`);
+            logger.warn(`[${providerLabel}] API error on iteration ${iteration}, returning last response`, { iteration, status: apiErr?.status });
             break;
           }
           throw apiErr;
@@ -1170,7 +1181,7 @@ export class AgentRuntime {
           }
 
           const executionInput = this.adaptToolArgsForExecution(toolName, toolArgs);
-          console.log(`[${providerLabel}] Tool call: ${toolName}`, executionInput);
+          logger.info(`[${providerLabel}] Tool call: ${toolName}`, { tool: toolName, input: executionInput });
 
           try {
             const result = await this.executeTool(toolName, executionInput);
@@ -1180,7 +1191,7 @@ export class AgentRuntime {
             toolSummaryLines.push(`- ${toolName}: ${content.slice(0, 600)}`);
           } catch (error) {
             const errorMessage = this.getErrorMessage(error);
-            console.error(`[${providerLabel}] Tool execution failed ${toolName}:`, errorMessage);
+            logger.error(`[${providerLabel}] Tool execution failed ${toolName}`, error, { tool: toolName });
             nextInput.push({ type: 'function_call_output', call_id: (fc as any).call_id, output: `tool_error: ${errorMessage}` });
             toolSummaryLines.push(`- ${toolName}: tool_error: ${errorMessage}`);
           }
@@ -1209,7 +1220,7 @@ export class AgentRuntime {
 
       return finalResponse;
     } catch (error) {
-      console.error(`Chat (${providerLabel}) error:`, error);
+      logger.error(`Chat (${providerLabel}) error`, error);
       throw error;
     }
   }
@@ -1246,7 +1257,7 @@ export class AgentRuntime {
         'screenshot', 'ocr', 'click', 'type_text', 'hotkey',
       ]);
       const toolDefs = allToolDefs.filter((t: any) => DEV_TOOL_NAMES.has(t.name));
-      console.log(`[${providerLabel}] Sending ${toolDefs.length}/${allToolDefs.length} tools`);
+      logger.info(`[${providerLabel}] Sending ${toolDefs.length}/${allToolDefs.length} tools`, { toolCount: toolDefs.length, totalCount: allToolDefs.length });
 
       const history = this.loadSessionMessages(normalizedSessionId);
       // Build messages array for Anthropic Messages API
@@ -1278,7 +1289,7 @@ export class AgentRuntime {
         } catch (apiErr: any) {
           // On 400 context limit, retry without tools if this is a follow-up iteration
           if (apiErr?.status === 400 && iteration > 0) {
-            console.warn(`[${providerLabel}] Context limit hit on iteration ${iteration}, returning last response`);
+            logger.warn(`[${providerLabel}] Context limit hit on iteration ${iteration}, returning last response`, { iteration });
             break;
           }
           throw apiErr;
@@ -1318,7 +1329,7 @@ export class AgentRuntime {
           const safeInput = typeof rawInput === 'object' ? rawInput as Record<string, unknown> : {};
           const executionInput = this.adaptToolArgsForExecution(toolName, safeInput);
 
-          console.log(`[${providerLabel}] Tool call: ${toolName}`, executionInput);
+          logger.info(`[${providerLabel}] Tool call: ${toolName}`, { tool: toolName, input: executionInput });
 
           try {
             const result = await this.executeTool(toolName, executionInput);
@@ -1333,7 +1344,7 @@ export class AgentRuntime {
             toolSummaryLines.push(this.buildToolSummaryLine(toolName, modelResult));
           } catch (error) {
             const errorMessage = this.getErrorMessage(error);
-            console.error(`[${providerLabel}] Tool execution failed ${toolName}:`, errorMessage);
+            logger.error(`[${providerLabel}] Tool execution failed ${toolName}`, error, { tool: toolName });
 
             toolResultBlocks.push({
               type: 'tool_result',
@@ -1370,7 +1381,7 @@ export class AgentRuntime {
 
       return finalResponse;
     } catch (error) {
-      console.error(`Chat (${providerLabel}) error:`, error);
+      logger.error(`Chat (${providerLabel}) error`, error);
       throw error;
     }
   }
@@ -1407,7 +1418,7 @@ export class AgentRuntime {
         } catch (apiError: any) {
           // Auto-retry on 402 (insufficient credits) - drop tools to reduce tokens
           if (apiError?.status === 402 || apiError?.error?.type === '402' || String(apiError?.message ?? '').includes('402')) {
-            console.warn(`⚠️ 402 token/credit limit hit, retrying without tools`);
+            logger.warn('402 token/credit limit hit, retrying without tools');
             useTools = false;
             try {
               response = await this.anthropicClient.messages.create({
@@ -1418,7 +1429,7 @@ export class AgentRuntime {
               });
             } catch (retryError: any) {
               // If still failing, use minimal fallback
-              console.warn(`⚠️ Retry also failed, switching to simple fallback`);
+              logger.warn('Retry also failed, switching to simple fallback');
               return await this.chatSimpleByProvider('anthropic', message, sessionId);
             }
           } else {
@@ -1455,7 +1466,7 @@ export class AgentRuntime {
               : {};
           const executionInput = this.adaptToolArgsForExecution(toolUse.name, safeInput);
 
-          console.log(`Tool call: ${toolUse.name}`, executionInput);
+          logger.info(`Tool call: ${toolUse.name}`, { tool: toolUse.name, input: executionInput });
 
           try {
             const result = await this.executeTool(toolUse.name, executionInput);
@@ -1470,7 +1481,7 @@ export class AgentRuntime {
             toolSummaryLines.push(this.buildToolSummaryLine(toolUse.name, modelResult));
           } catch (error) {
             const errorMessage = this.getErrorMessage(error);
-            console.error(`Tool execution failed ${toolUse.name}:`, errorMessage);
+            logger.error(`Tool execution failed ${toolUse.name}`, error, { tool: toolUse.name });
 
             toolResultBlocks.push({
               type: 'tool_result',
@@ -1503,7 +1514,7 @@ export class AgentRuntime {
 
       return finalResponse;
     } catch (error) {
-      console.error('Chat (Anthropic) error:', error);
+      logger.error('Chat (Anthropic) error', error);
       throw error;
     }
   }
@@ -1533,7 +1544,7 @@ export class AgentRuntime {
         await this.memoryManager.addDaily(`助手: ${assistantMessage}`);
         return assistantMessage;
       } catch (error) {
-        console.error('ChatSimple (OpenAI) error:', error);
+        logger.error('ChatSimple (OpenAI) error', error);
         return `处理消息时出错: ${(error as Error).message}`;
       }
     }
@@ -1566,7 +1577,7 @@ export class AgentRuntime {
 
       return assistantMessage;
     } catch (error) {
-      console.error('Chat simple error:', error);
+      logger.error('Chat simple error', error);
       return `处理消息时出错: ${(error as Error).message}`;
     }
   }
@@ -1579,9 +1590,7 @@ export class AgentRuntime {
       );
     }
     if (decision.warnings.length > 0) {
-      console.warn(
-        `[Security][${decision.mode}] ${toolName}: ${decision.warnings.join('; ')}`,
-      );
+      logger.warn(`[Security][${decision.mode}] ${toolName}`, { tool: toolName, warnings: decision.warnings });
     }
 
     // Record tool execution metrics
@@ -1694,7 +1703,7 @@ export class AgentRuntime {
         : this.provider === 'krio'
           ? this.krioModelName
           : this.openaiModelName;
-    console.log(`\u{1F504} Model config updated: provider=${this.provider}, model=${this.modelName}`);
+    logger.info(`Model config updated: provider=${this.provider}, model=${this.modelName}`, { provider: this.provider, model: this.modelName });
 
     const autoPersist = parseBoolean(process.env.CHUBAO_ENV_AUTO_PERSIST, false);
     if (autoPersist) {
@@ -1704,13 +1713,10 @@ export class AgentRuntime {
           includeSecrets: true,
         });
         if (result.wrote) {
-          console.log(`\u{1F4BE} Model config auto-persisted: ${result.envPath}`);
+          logger.info(`Model config auto-persisted: ${result.envPath}`, { envPath: result.envPath });
         }
       } catch (error) {
-        console.warn(
-          'Failed to auto-persist model config:',
-          error instanceof Error ? error.message : String(error),
-        );
+        logger.warn('Failed to auto-persist model config', { error: error instanceof Error ? error.message : String(error) });
       }
     }
   }
@@ -1876,7 +1882,7 @@ export class AgentRuntime {
     // Switch to anthropic provider
     patch.provider = 'anthropic';
     this.updateModelConfig(patch);
-    console.log(`\u{1F504} Synced from Claude Code: key=${synced.apiKey}, url=${synced.baseUrl}, model=${synced.model}`);
+    logger.info(`Synced from Claude Code: key=${synced.apiKey}, url=${synced.baseUrl}, model=${synced.model}`, { synced });
     return { success: true, synced };
   }
 

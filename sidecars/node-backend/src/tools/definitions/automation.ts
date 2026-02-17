@@ -140,7 +140,13 @@ export const dragTool: Tool = {
   execute: async (args: { fromX: number; fromY: number; toX: number; toY: number; duration?: number }) => {
     const response = await fetchWithRetry(`${PYTHON_SERVICE_URL}/api/drag`, {
       method: 'POST',
-      body: JSON.stringify(args),
+      body: JSON.stringify({
+        start_x: args.fromX,
+        start_y: args.fromY,
+        end_x: args.toX,
+        end_y: args.toY,
+        duration: args.duration,
+      }),
     });
     const data = await response.json();
     if (!data.success) throw new Error(data.message || data.error || 'Drag failed');
@@ -214,9 +220,15 @@ export const screenshotTool: Tool = {
     });
     const data = await response.json();
     if (!data.success) throw new Error(data.message || data.error || 'Screenshot failed');
+    // 返回完整的截图数据，包括 base64 和坐标映射信息
     return {
-      path: data.path,
-      base64: data.base64,
+      path: data.result?.path || data.path,
+      base64: data.result?.base64 || data.base64,
+      media_type: data.result?.media_type || 'image/png',
+      actual_size: data.result?.actual_size,
+      model_size: data.result?.model_size,
+      scale_x: data.result?.scale_x,
+      scale_y: data.result?.scale_y,
     };
   },
 };

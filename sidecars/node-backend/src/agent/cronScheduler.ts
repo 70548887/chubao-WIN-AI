@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import * as fsSync from 'node:fs';
 import * as path from 'node:path';
 import type { QueueTaskPayload } from './taskQueue.js';
+import { logger } from '../utils/logger.js';
 
 interface CronField {
   values: Set<number>;
@@ -392,10 +393,7 @@ export class CronScheduler {
         job.updatedAt = nowIso;
         changed = true;
       } catch (error) {
-        console.warn(
-          `Cron job enqueue failed (${job.id}):`,
-          error instanceof Error ? error.message : String(error),
-        );
+        logger.warn(`Cron job enqueue failed (${job.id})`, { error: error instanceof Error ? error.message : String(error), jobId: job.id });
       }
     }
 
@@ -444,10 +442,7 @@ export class CronScheduler {
       };
       fsSync.writeFileSync(this.statePath, JSON.stringify(payload, null, 2), 'utf8');
     } catch (error) {
-      console.warn(
-        'Failed to persist cron scheduler state:',
-        error instanceof Error ? error.message : String(error),
-      );
+      logger.warn('Failed to persist cron scheduler state', { error: error instanceof Error ? error.message : String(error) });
     }
   }
 
@@ -511,10 +506,7 @@ export class CronScheduler {
         }
       }
     } catch (error) {
-      console.warn(
-        'Failed to load persisted cron scheduler state:',
-        error instanceof Error ? error.message : String(error),
-      );
+      logger.warn('Failed to load persisted cron scheduler state', { error: error instanceof Error ? error.message : String(error) });
     }
   }
 }

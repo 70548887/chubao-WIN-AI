@@ -1,15 +1,71 @@
-﻿import { useState } from 'react';
+﻿import { useState, useEffect } from 'react';
 import Chat from './components/Chat';
 import CodingDashboard from './components/CodingDashboard';
 import AutomationPanel from './components/AutomationPanel';
 import Sidebar from './components/Sidebar';
-import SettingsPanel from './components/SettingsPanel';
 import SkillsPanel from './components/SkillsPanel';
+import { SettingsPanelNew } from './components/SettingsPanelNew';
+import { ToastContainer } from './components/NotificationCenter';
+import { PerformancePanel } from './components/PerformancePanel';
+import { PluginManagerPanel } from './components/PluginManager';
+import { DingTalkConfig } from './components/DingTalkConfig';
+import { WeChatWorkConfig } from './components/WeChatWorkConfig';
+import { initializePluginManager } from './core/plugin/PluginManager';
+import type { PluginContext } from './core/plugin/types';
 
-type ActiveTab = 'chat' | 'dashboard' | 'automation' | 'skills' | 'settings';
+type ActiveTab = 'chat' | 'dashboard' | 'automation' | 'skills' | 'settings' | 'plugins' | 'platforms';
 
 function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('chat');
+
+  // 初始化插件系统
+  useEffect(() => {
+    const context: PluginContext = {
+      storage: {
+        get: async <T,>(key: string, defaultValue?: T): Promise<T | undefined> => {
+          const stored = localStorage.getItem(`app:${key}`);
+          return stored ? JSON.parse(stored) : defaultValue;
+        },
+        set: async <T,>(key: string, value: T): Promise<void> => {
+          localStorage.setItem(`app:${key}`, JSON.stringify(value));
+        },
+        remove: async (key: string): Promise<void> => {
+          localStorage.removeItem(`app:${key}`);
+        },
+      },
+      fetch: window.fetch.bind(window),
+      notify: (message: string) => {
+        console.log('[App Notify]', message);
+      },
+      log: {
+        debug: console.debug,
+        info: console.info,
+        warn: console.warn,
+        error: console.error,
+      },
+      events: {
+        on: (event: string, handler: (data: unknown) => void) => {
+          const listener = (e: Event) => handler((e as CustomEvent).detail);
+          window.addEventListener(event, listener);
+          return () => window.removeEventListener(event, listener);
+        },
+        emit: (event: string, data?: unknown) => {
+          window.dispatchEvent(new CustomEvent(event, { detail: data }));
+        },
+      },
+      ui: {
+        registerPanel: () => {},
+        registerCommand: () => {},
+        showModal: async () => {},
+      },
+      system: {
+        getPlatform: () => navigator.platform,
+        getVersion: () => '0.2.0',
+      },
+    };
+
+    initializePluginManager(context);
+  }, []);
 
   return (
     <div className="app">
@@ -19,8 +75,19 @@ function App() {
         {activeTab === 'dashboard' && <CodingDashboard />}
         {activeTab === 'automation' && <AutomationPanel />}
         {activeTab === 'skills' && <SkillsPanel />}
-        {activeTab === 'settings' && <SettingsPanel />}
+        {activeTab === 'settings' && <SettingsPanelNew />}
+        {activeTab === 'plugins' && <PluginManagerPanel />}
+        {activeTab === 'platforms' && (
+          <div className="platforms-config">
+            <h2>📱 平台配置</h2>
+            <DingTalkConfig />
+            <div style={{ marginTop: '32px' }} />
+            <WeChatWorkConfig />
+          </div>
+        )}
       </main>
+      <ToastContainer />
+      <PerformancePanel />
     </div>
   );
 }

@@ -15,6 +15,7 @@ import * as fsSync from 'node:fs';
 import * as path from 'node:path';
 import type { AgentRuntime } from './runtime.js';
 import type { MemoryManager } from '../memory/manager.js';
+import { logger } from '../utils/logger.js';
 
 export type AgentRole = 'architect' | 'frontend' | 'backend' | 'tester' | 'custom';
 
@@ -158,11 +159,11 @@ export class AgentRouter {
    */
   registerAgent(config: AgentConfig): void {
     if (this.configs.has(config.id)) {
-      console.warn(`[AgentRouter] Overwriting existing agent config: ${config.id}`);
+      logger.warn(`[AgentRouter] Overwriting existing agent config: ${config.id}`);
     }
     this.configs.set(config.id, config);
     this.persistState();
-    console.log(`[AgentRouter] Registered agent: ${config.id} (${config.name})`);
+    logger.info(`[AgentRouter] Registered agent: ${config.id} (${config.name})`);
   }
 
   /**
@@ -175,7 +176,7 @@ export class AgentRouter {
     const deleted = this.configs.delete(agentId);
     if (deleted) {
       this.persistState();
-      console.log(`[AgentRouter] Unregistered agent: ${agentId}`);
+      logger.info(`[AgentRouter] Unregistered agent: ${agentId}`);
     }
     return deleted;
   }
@@ -221,7 +222,7 @@ export class AgentRouter {
     };
 
     this.agents.set(agentId, instance);
-    console.log(`[AgentRouter] Started agent: ${agentId} with session ${sessionId}`);
+    logger.info(`[AgentRouter] Started agent: ${agentId} with session ${sessionId}`);
     
     return instance;
   }
@@ -237,7 +238,7 @@ export class AgentRouter {
 
     // Clean up session
     this.agents.delete(agentId);
-    console.log(`[AgentRouter] Stopped agent: ${agentId}`);
+    logger.info(`[AgentRouter] Stopped agent: ${agentId}`);
     return true;
   }
 
@@ -358,7 +359,7 @@ export class AgentRouter {
 
       fsSync.writeFileSync(this.statePath, JSON.stringify(payload, null, 2), 'utf-8');
     } catch (error) {
-      console.warn('[AgentRouter] Failed to persist state:', error);
+      logger.warn('[AgentRouter] Failed to persist state', { error: error instanceof Error ? error.message : String(error) });
     }
   }
 
@@ -377,7 +378,7 @@ export class AgentRouter {
       const payload = JSON.parse(content) as PersistedAgentRouterState;
 
       if (payload.schemaVersion !== ROUTER_SCHEMA_VERSION) {
-        console.warn('[AgentRouter] Schema version mismatch, using defaults');
+        logger.warn('[AgentRouter] Schema version mismatch, using defaults');
         return;
       }
 
@@ -391,9 +392,12 @@ export class AgentRouter {
       // Load routing rules
       this.rules = payload.rules ?? [];
 
-      console.log(`[AgentRouter] Loaded ${this.configs.size} configs, ${this.rules.length} rules`);
+      logger.info(`[AgentRouter] Loaded ${this.configs.size} configs, ${this.rules.length} rules`, {
+        configCount: this.configs.size,
+        ruleCount: this.rules.length,
+      });
     } catch (error) {
-      console.warn('[AgentRouter] Failed to load state:', error);
+      logger.warn('[AgentRouter] Failed to load state', { error: error instanceof Error ? error.message : String(error) });
     }
   }
 }

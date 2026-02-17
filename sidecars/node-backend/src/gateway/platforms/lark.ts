@@ -17,6 +17,7 @@
 import { AgentRuntime } from '../../agent/runtime.js';
 import express from 'express';
 import crypto from 'crypto';
+import { logger } from '../../utils/logger.js';
 
 interface LarkConfig {
   appId: string;
@@ -95,8 +96,7 @@ export class LarkIntegration {
           maxDelay
         );
 
-        console.log(`⚠️ 操作失败 (${attempt + 1}/${maxRetries}), ${delay}ms 后重试:`,
-          (error as Error).message);
+        logger.warn(`⚠️ 操作失败 (${attempt + 1}/${maxRetries}), ${delay}ms 后重试: ${(error as Error).message}`, { attempt: attempt + 1, maxRetries, delay, error: (error as Error).message });
         
         await this.sleep(delay);
       }
@@ -201,7 +201,7 @@ export class LarkIntegration {
       throw new Error('获取 Lark token 失败: 返回的 token 为空');
     }
     
-    console.log('✅ Lark Token 刷新成功');
+    logger.info('✅ Lark Token 刷新成功');
     return this.tenantAccessToken;
   }
 
@@ -229,7 +229,7 @@ export class LarkIntegration {
       
       return hash === signature;
     } catch (error) {
-      console.error('验证 Lark 签名失败:', error);
+      logger.error('验证 Lark 签名失败', error);
       return false;
     }
   }
@@ -256,7 +256,7 @@ export class LarkIntegration {
       
       return decrypted.toString('utf8');
     } catch (error) {
-      console.error('解密 Lark 消息失败:', error);
+      logger.error('解密 Lark 消息失败', error);
       throw new Error('解密消息失败');
     }
   }
@@ -281,7 +281,7 @@ export class LarkIntegration {
 
       return { status: 'ok' };
     } catch (error) {
-      console.error('处理 Lark 事件失败:', error);
+      logger.error('处理 Lark 事件失败', error);
       // 即使处理失败也返回 ok，避免飞书重试
       return { status: 'ok' };
     }
@@ -323,7 +323,7 @@ export class LarkIntegration {
         try {
           await this.handleMessage(event);
         } catch (error) {
-          console.error(`处理 Lark 消息失败 (chat: ${chatId}):`, error);
+          logger.error(`处理 Lark 消息失败 (chat: ${chatId})`, error);
         }
 
         // 添加小延迟避免 API 限流
@@ -369,11 +369,11 @@ export class LarkIntegration {
     }
 
     if (!content.trim()) {
-      console.log('⚠️ 收到空消息，忽略');
+      logger.warn('⚠️ 收到空消息，忽略');
       return;
     }
 
-    console.log(`📨 收到 Lark 消息: ${content.substring(0, 50)}...`);
+    logger.info(`📨 收到 Lark 消息: ${content.substring(0, 50)}...`, { senderId: sender.sender_id.open_id, messageLength: content.length });
 
     // 构建上下文
     const sessionId = `lark_${sender.sender_id.open_id}`;
@@ -391,7 +391,7 @@ export class LarkIntegration {
       // 回复消息
       await this.sendMessage(message.chat_id, truncatedResponse, 'text');
     } catch (error) {
-      console.error('处理 Lark 消息失败:', error);
+      logger.error('处理 Lark 消息失败', error);
       await this.sendMessage(
         message.chat_id, 
         '抱歉，处理消息时出错了，请稍后再试。',
@@ -458,7 +458,7 @@ export class LarkIntegration {
         throw error;
       }
 
-      console.log(`📤 已发送 Lark 消息到: ${chatId}`);
+      logger.info(`📤 已发送 Lark 消息到: ${chatId}`, { chatId });
     }, {
       maxRetries: 3,
       baseDelay: 1000,
@@ -490,13 +490,13 @@ export class LarkIntegration {
         
         // 处理事件 (异步，快速返回)
         this.handleEvent(event).catch(error => {
-          console.error('处理 Lark 事件失败:', error);
+          logger.error('处理 Lark 事件失败', error);
         });
 
         // 立即返回成功，避免飞书重试
         res.json({ status: 'ok' });
       } catch (error) {
-        console.error('处理 Lark webhook 失败:', error);
+        logger.error('处理 Lark webhook 失败', error);
         // 即使失败也返回 200，避免飞书重试
         res.json({ status: 'ok' });
       }

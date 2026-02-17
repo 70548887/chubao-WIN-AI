@@ -9,6 +9,7 @@ import { z } from 'zod';
 import * as path from 'node:path';
 import { execSync, spawn } from 'node:child_process';
 import type { Tool } from './index.js';
+import { logger } from '../utils/logger.js';
 
 // ---------------------------------------------------------------------------
 // Workspace root
@@ -112,8 +113,7 @@ export const callClaudeCodeTool: Tool = {
 
     const command = `claude ${flags.join(' ')} ${escapeShellArg(args.prompt)}`;
 
-    console.log(`[call_claude_code] Executing: ${command.substring(0, 200)}...`);
-    console.log(`[call_claude_code] Working directory: ${cwd}`);
+    logger.info(`[call_claude_code] Executing: ${command.substring(0, 200)}...`, { cli: 'claude-code', cwd });
 
     try {
       const output = execSync(command, {
@@ -186,8 +186,7 @@ export const callOpencodeTool: Tool = {
     // OpenCode command structure may vary, using common pattern
     const command = `opencode ${escapeShellArg(args.prompt)}`;
 
-    console.log(`[call_opencode] Executing: ${command.substring(0, 200)}...`);
-    console.log(`[call_opencode] Working directory: ${cwd}`);
+    logger.info(`[call_opencode] Executing: ${command.substring(0, 200)}...`, { cli: 'opencode', cwd });
 
     try {
       const output = execSync(command, {

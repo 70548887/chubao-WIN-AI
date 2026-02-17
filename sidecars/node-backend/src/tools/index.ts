@@ -13,6 +13,7 @@
 
 import { z } from 'zod';
 import { analyzeCodingProgress } from '../coding/progress.js';
+import { logger } from '../utils/logger.js';
 import {
   installSkillFromPath,
   loadSkillToolsFromRegistry,
@@ -1315,7 +1316,7 @@ export class ToolManager {
     this.skillsInitializing = null;
     await this.reloadSkills();
     this.skillsInitialized = true;
-    console.log(`\u{1F504} Skills reloaded: ${this.skillToolNames.size} skill tools active`);
+    logger.info(`Skills reloaded: ${this.skillToolNames.size} skill tools active`, { skillCount: this.skillToolNames.size });
   }
 
   async installSkill(skillPath: string): Promise<{

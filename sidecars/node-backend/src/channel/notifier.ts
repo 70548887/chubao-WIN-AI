@@ -15,6 +15,7 @@
 import type { ChannelEventBus } from './eventBus.js';
 import type { ChannelManager } from './manager.js';
 import type { NotificationEvent, NotifierConfig } from './types.js';
+import { logger } from '../utils/logger.js';
 
 const LEVEL_EMOJI: Record<NotificationEvent['level'], string> = {
   info: 'ℹ️',
@@ -69,7 +70,7 @@ export class Notifier {
    */
   start(): void {
     if (!this.config.enabled) {
-      console.log('[Notifier] Disabled by config');
+      logger.info('[Notifier] Disabled by config');
       return;
     }
 
@@ -118,7 +119,7 @@ export class Notifier {
     // Start queue flush timer
     this.flushTimer = setInterval(() => this.flushQueue(), 5000);
 
-    console.log('[Notifier] Started, listening for notifications');
+    logger.info('[Notifier] Started, listening for notifications');
   }
 
   /**
@@ -135,7 +136,7 @@ export class Notifier {
       this.flushTimer = null;
     }
 
-    console.log('[Notifier] Stopped');
+    logger.info('[Notifier] Stopped');
   }
 
   /**
@@ -190,7 +191,7 @@ export class Notifier {
         sentTo.push(channelId);
         this.lastSentAt.set(`${channelId}:${event.category}`, Date.now());
       } catch (err) {
-        console.error(`[Notifier] Failed to send via ${channelId}:`, err);
+        logger.error(`[Notifier] Failed to send via ${channelId}`, err);
       }
     }
 

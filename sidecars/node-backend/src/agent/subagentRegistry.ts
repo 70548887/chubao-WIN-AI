@@ -10,6 +10,7 @@ import * as fsSync from 'node:fs';
 import * as path from 'node:path';
 import type { AgentRuntime } from './runtime.js';
 import type { MemoryManager } from '../memory/manager.js';
+import { logger } from '../utils/logger.js';
 
 export type SubagentStatus = 'pending' | 'running' | 'completed' | 'failed' | 'canceled';
 
@@ -136,7 +137,7 @@ export class SubagentRegistry {
 
     // Start execution asynchronously (non-blocking)
     this.executeSubagent(record).catch((error) => {
-      console.error(`[SubagentRegistry] Execution error for ${runId}:`, error);
+      logger.error(`[SubagentRegistry] Execution error for ${runId}`, error);
       record.status = 'failed';
       record.error = error.message || 'Execution failed';
       record.finishedAt = new Date().toISOString();
@@ -227,7 +228,7 @@ export class SubagentRegistry {
     this.activeRuns.add(runId);
     this.persistState();
 
-    console.log(`[SubagentRegistry] Starting subagent ${runId}: ${config.label ?? config.task.substring(0, 50)}`);
+    logger.info(`[SubagentRegistry] Starting subagent ${runId}: ${config.label ?? config.task.substring(0, 50)}`);
 
     try {
       // Build system prompt for subagent
@@ -247,12 +248,12 @@ export class SubagentRegistry {
       record.status = 'completed';
       record.finishedAt = new Date().toISOString();
 
-      console.log(`[SubagentRegistry] Subagent ${runId} completed in ${Date.now() - startTime}ms`);
+      logger.info(`[SubagentRegistry] Subagent ${runId} completed in ${Date.now() - startTime}ms`);
     } catch (error: any) {
       record.status = 'failed';
       record.error = error.message || 'Unknown error';
       record.finishedAt = new Date().toISOString();
-      console.error(`[SubagentRegistry] Subagent ${runId} failed:`, error.message);
+      logger.error(`[SubagentRegistry] Subagent ${runId} failed`, error);
     } finally {
       this.activeRuns.delete(runId);
       this.persistState();
@@ -327,7 +328,7 @@ Begin working on the task now.`;
 
       fsSync.writeFileSync(this.statePath, JSON.stringify(payload, null, 2), 'utf-8');
     } catch (error) {
-      console.warn('[SubagentRegistry] Failed to persist state:', error);
+      logger.warn('[SubagentRegistry] Failed to persist state', { error: error instanceof Error ? error.message : String(error) });
     }
   }
 
@@ -346,7 +347,7 @@ Begin working on the task now.`;
       const payload = JSON.parse(content) as PersistedSubagentPayload;
 
       if (payload.schemaVersion !== SUBAGENT_SCHEMA_VERSION) {
-        console.warn('[SubagentRegistry] Schema version mismatch, starting fresh');
+        logger.warn('[SubagentRegistry] Schema version mismatch, starting fresh');
         return;
       }
 
@@ -360,9 +361,9 @@ Begin working on the task now.`;
         this.runs.set(run.runId, run);
       }
 
-      console.log(`[SubagentRegistry] Loaded ${this.runs.size} runs from state`);
+      logger.info(`[SubagentRegistry] Loaded ${this.runs.size} runs from state`);
     } catch (error) {
-      console.warn('[SubagentRegistry] Failed to load state:', error);
+      logger.warn('[SubagentRegistry] Failed to load state', { error: error instanceof Error ? error.message : String(error) });
     }
   }
 

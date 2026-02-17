@@ -17,6 +17,7 @@
  */
 
 import { ChannelEventBus } from './eventBus.js';
+import { logger } from '../utils/logger.js';
 import type {
   IChannelPlugin,
   ChannelPluginConfig,
@@ -45,12 +46,12 @@ export class ChannelManager {
    */
   register(plugin: IChannelPlugin, config: ChannelPluginConfig): void {
     if (this.plugins.has(plugin.id)) {
-      console.warn(`[ChannelManager] Plugin "${plugin.id}" already registered, replacing...`);
+      logger.warn(`[ChannelManager] Plugin "${plugin.id}" already registered, replacing...`);
       // Stop old plugin if running
       const old = this.plugins.get(plugin.id);
       if (old) {
         old.stop().catch((err) => {
-          console.error(`[ChannelManager] Failed to stop old "${plugin.id}":`, err);
+          logger.error(`[ChannelManager] Failed to stop old "${plugin.id}"`, err);
         });
       }
     }
@@ -63,7 +64,7 @@ export class ChannelManager {
       timestamp: Date.now(),
     });
 
-    console.log(`[ChannelManager] Registered: ${plugin.id} (${plugin.name})`);
+    logger.info(`[ChannelManager] Registered: ${plugin.id} (${plugin.name})`);
   }
 
   /**
@@ -76,7 +77,7 @@ export class ChannelManager {
     try {
       await plugin.stop();
     } catch (err) {
-      console.error(`[ChannelManager] Error stopping "${channelId}":`, err);
+      logger.error(`[ChannelManager] Error stopping "${channelId}"`, err);
     }
 
     this.plugins.delete(channelId);
@@ -87,7 +88,7 @@ export class ChannelManager {
       timestamp: Date.now(),
     });
 
-    console.log(`[ChannelManager] Unregistered: ${channelId}`);
+    logger.info(`[ChannelManager] Unregistered: ${channelId}`);
   }
 
   // ---------------------------------------------------------------------------
@@ -104,7 +105,7 @@ export class ChannelManager {
     for (const [id, plugin] of this.plugins) {
       const config = this.configs.get(id);
       if (!config?.enabled) {
-        console.log(`[ChannelManager] Skipping disabled channel: ${id}`);
+        logger.info(`[ChannelManager] Skipping disabled channel: ${id}`);
         results.push({ id, ok: true });
         continue;
       }
@@ -126,7 +127,7 @@ export class ChannelManager {
         });
 
         results.push({ id, ok: true });
-        console.log(`[ChannelManager] Started: ${id}`);
+        logger.info(`[ChannelManager] Started: ${id}`);
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
 
@@ -138,7 +139,7 @@ export class ChannelManager {
         });
 
         results.push({ id, ok: false, error: errMsg });
-        console.error(`[ChannelManager] Failed to start "${id}":`, err);
+        logger.error(`[ChannelManager] Failed to start "${id}"`, err);
       }
     }
 
@@ -167,12 +168,12 @@ export class ChannelManager {
         });
         await plugin.stop();
       } catch (err) {
-        console.error(`[ChannelManager] Error stopping "${id}":`, err);
+        logger.error(`[ChannelManager] Error stopping "${id}"`, err);
       }
     });
 
     await Promise.allSettled(promises);
-    console.log('[ChannelManager] All channels stopped');
+    logger.info('[ChannelManager] All channels stopped');
   }
 
   // ---------------------------------------------------------------------------
@@ -303,13 +304,13 @@ export class ChannelManager {
   private setupInternalListeners(): void {
     // Log all inbound messages
     this.eventBus.on('message:inbound', (msg: InboundMessage) => {
-      console.log(`[ChannelManager] Inbound from ${msg.channel}: ${msg.text.substring(0, 60)}...`);
+      logger.info(`[ChannelManager] Inbound from ${msg.channel}: ${msg.text.substring(0, 60)}...`);
     });
 
     // Log channel state changes
     this.eventBus.on('channel:state', (event) => {
       if (event.state === 'error') {
-        console.error(`[ChannelManager] Channel "${event.channel}" error: ${event.error}`);
+        logger.error(`[ChannelManager] Channel "${event.channel}" error: ${event.error}`);
       }
     });
   }

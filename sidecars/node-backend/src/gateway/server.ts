@@ -4,6 +4,7 @@
 
 import { WebSocketServer, WebSocket } from 'ws';
 import { AgentRuntime } from '../agent/runtime.js';
+import { logger } from '../utils/logger.js';
 
 interface WSMessage {
   type: string;
@@ -24,7 +25,7 @@ export class GatewayServer {
 
   private setupWebSocket(): void {
     this.wss.on('connection', (ws: WebSocket) => {
-      console.log('📡 新客户端连接');
+      logger.info('📡 新客户端连接');
       this.clients.add(ws);
 
       ws.on('message', async (data: Buffer) => {
@@ -32,18 +33,18 @@ export class GatewayServer {
           const message: WSMessage = JSON.parse(data.toString());
           await this.handleMessage(ws, message);
         } catch (error) {
-          console.error('消息处理错误:', error);
+          logger.error('消息处理错误', error);
           this.sendError(ws, String(error));
         }
       });
 
       ws.on('close', () => {
-        console.log('📡 客户端断开');
+        logger.info('📡 客户端断开');
         this.clients.delete(ws);
       });
 
       ws.on('error', (error) => {
-        console.error('WebSocket 错误:', error);
+        logger.error('WebSocket 错误', error);
         this.clients.delete(ws);
       });
 
@@ -74,7 +75,7 @@ export class GatewayServer {
         break;
 
       default:
-        console.log('未知消息类型:', message.type);
+        logger.info(`未知消息类型: ${message.type}`, { type: message.type });
     }
   }
 

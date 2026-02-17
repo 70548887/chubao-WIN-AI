@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { logger } from '../utils/logger.js';
 import {
   cancelOhMyTask,
   getOhMyTaskStatus,
@@ -278,10 +279,7 @@ function loadPersistedGroupsIfNeeded(): void {
       multiAgentGroups.set(group.id, group);
     }
   } catch (error) {
-    console.warn(
-      'Failed to load persisted multi-agent groups:',
-      error instanceof Error ? error.message : String(error),
-    );
+    logger.warn('Failed to load persisted multi-agent groups', { error: error instanceof Error ? error.message : String(error) });
   }
 }
 
@@ -316,10 +314,7 @@ function persistMultiAgentGroups(): void {
 
     fs.writeFileSync(MULTI_AGENT_GROUP_STATE_PATH, JSON.stringify(payload, null, 2), 'utf8');
   } catch (error) {
-    console.warn(
-      'Failed to persist multi-agent groups:',
-      error instanceof Error ? error.message : String(error),
-    );
+    logger.warn('Failed to persist multi-agent groups', { error: error instanceof Error ? error.message : String(error) });
   }
 }
 

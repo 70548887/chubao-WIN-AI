@@ -30,3 +30,5 @@ export type {
 
 // Plugins
 export { TelegramPlugin } from './plugins/telegram.js';
+export { DingTalkPlugin } from './plugins/dingtalk.js';
+export { WeChatWorkPlugin } from './plugins/wechat-work.js';

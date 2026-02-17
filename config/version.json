@@ -1,0 +1,7 @@
+{
+  "version": "0.3.0",
+  "name": "chubao-WIN-AI",
+  "description": "Windows 本地 AI 自动化控制工具",
+  "channel": "stable",
+  "releaseDate": "2026-02-15"
+}

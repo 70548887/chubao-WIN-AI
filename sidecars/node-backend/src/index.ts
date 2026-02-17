@@ -21,7 +21,7 @@ import {
   WhatsAppIntegration,
 } from './gateway/platforms/index.js';
 // Channel system (plugin-based EventBus architecture)
-import { getEventBus, ChannelManager, Notifier, TelegramPlugin } from './channel/index.js';
+import { getEventBus, ChannelManager, Notifier, TelegramPlugin, DingTalkPlugin, WeChatWorkPlugin } from './channel/index.js';
 // Task queue and cron scheduler
 import { TaskQueue } from './agent/taskQueue.js';
 import { CronScheduler } from './agent/cronScheduler.js';
@@ -30,6 +30,7 @@ import { initializeAgentRouter } from './agent/agentRouter.js';
 import { performanceMonitor } from './monitoring/performance.js';
 import { createMonitoringRouter } from './monitoring/routes.js';
 import { createPromptsRouter } from './prompts/routes.js';
+import { logger } from './utils/logger.js';
 
 config();
 
@@ -135,7 +136,7 @@ function computeHealthStatus(deps: Record<string, DependencyState>): HealthState
 }
 
 async function main() {
-  console.log('🚀 Chubao AI Node.js 后端启动中...');
+  logger.info('Chubao AI Node.js 后端启动中...');
 
   const app = express();
 
@@ -177,12 +178,12 @@ async function main() {
   const wss = new WebSocketServer({ server, path: '/ws' });
   const onListenError = (error: NodeJS.ErrnoException): void => {
     if (error.code === 'EADDRINUSE') {
-      console.error(`❌ Port ${PORT} is already in use.`);
-      console.error('   Stop the existing process, or set NODE_PORT/PORT to another value.');
+      logger.error(`Port ${PORT} is already in use.`);
+      logger.error('Stop the existing process, or set NODE_PORT/PORT to another value');
       process.exit(1);
       return;
     }
-    console.error('❌ HTTP server listen error:', error);
+    logger.error('HTTP server listen error', error);
     process.exit(1);
   };
   server.on('error', onListenError);
@@ -191,7 +192,7 @@ async function main() {
     if (err.code === 'EADDRINUSE') {
       return;
     }
-    console.error('❌ WebSocket server error:', getErrorMessage(error));
+    logger.error('WebSocket server error', error);
   });
 
   const dependencies: Record<string, DependencyState> = {
@@ -211,7 +212,7 @@ async function main() {
   try {
     await toolManager.initializeSkills();
   } catch (error) {
-    console.warn('Skill tools initialize warning:', getErrorMessage(error));
+    logger.warn('Skill tools initialize warning', { error: getErrorMessage(error) });
   }
 
   const agentRuntime = new AgentRuntime(memoryManager);
@@ -222,10 +223,10 @@ async function main() {
   // ---------------------------------------------------------------------------
   // Task Queue & Cron Scheduler
   // ---------------------------------------------------------------------------
-  console.log('📋 初始化任务队列...');
+  logger.info('初始化任务队列...');
   const taskQueue = new TaskQueue({
     executeTask: async (payload, task) => {
-      console.log(`[TaskQueue] Executing task ${task.id}: ${payload.kind}`);
+      logger.info(`Executing task ${task.id}: ${payload.kind}`);
       try {
         if (payload.kind === 'chat') {
           const message = payload.message as string;
@@ -236,7 +237,7 @@ async function main() {
         // Add more task kinds as needed
         return { success: false, error: `Unknown task kind: ${payload.kind}` };
       } catch (error) {
-        console.error(`[TaskQueue] Task ${task.id} failed:`, error);
+        logger.error(`Task ${task.id} failed`, error);
         throw error;
       }
     },
@@ -244,7 +245,7 @@ async function main() {
     stateEnabled: true,
   });
 
-  console.log('⏰ 初始化定时调度器...');
+  logger.info('初始化定时调度器...');
   const cronScheduler = new CronScheduler({
     enqueueTask: (payload) => taskQueue.enqueue(payload),
     tickMs: 15_000, // Check every 15 seconds
@@ -255,21 +256,21 @@ async function main() {
   dependencies.cronScheduler = 'ok';
 
   // Initialize subagent registry
-  console.log('🤖 初始化子 Agent 注册表...');
+  logger.info('初始化子 Agent 注册表...');
   initializeSubagentRegistry({
     agentRuntime,
     memoryManager,
   });
-  console.log('✅ 子 Agent 系统已启用');
+  logger.info('子 Agent 系统已启用');
 
   // Initialize agent router
-  console.log('🎯 初始化多 Agent 路由系统...');
+  logger.info('初始化多 Agent 路由系统...');
   const agentRouter = initializeAgentRouter({
     memoryManager,
   });
-  console.log(`✅ 多 Agent 路由已启用 (${agentRouter.listAgentConfigs().length} agents)`);
+  logger.info('多 Agent 路由已启用', { agentCount: agentRouter.listAgentConfigs().length });
 
-  console.log('📱 初始化消息平台...');
+  logger.info('初始化消息平台...');
 
   let larkIntegration: LarkIntegration | null = null;
   if (process.env.LARK_APP_ID && process.env.LARK_APP_SECRET) {
@@ -286,14 +287,14 @@ async function main() {
 
       app.use('/lark', larkIntegration.getRouter());
       dependencies.lark = 'ok';
-      console.log('✅ 飞书集成已启用');
+      logger.info('飞书集成已启用');
     } catch (error) {
       dependencies.lark = 'error';
-      console.error('❌ 飞书集成初始化失败:', error);
+      logger.error('飞书集成初始化失败', error);
     }
   } else {
     dependencies.lark = 'disabled';
-    console.log('⚠️  飞书集成未启用 (缺少 LARK_APP_ID 或 LARK_APP_SECRET)');
+    logger.warn('飞书集成未启用 (缺少 LARK_APP_ID 或 LARK_APP_SECRET)');
   }
 
   // ---------------------------------------------------------------------------
@@ -326,6 +327,40 @@ async function main() {
           : undefined,
       });
 
+      // Register DingTalk plugin
+      if (process.env.DINGTALK_WEBHOOK) {
+        const dingtalkPlugin = new DingTalkPlugin(agentRuntime, eventBus);
+        channelManager.register(dingtalkPlugin, {
+          id: 'dingtalk',
+          name: 'DingTalk',
+          enabled: true,
+          webhook: process.env.DINGTALK_WEBHOOK,
+          secret: process.env.DINGTALK_SECRET,
+          atAll: process.env.DINGTALK_AT_ALL === 'true',
+          atMobiles: process.env.DINGTALK_AT_MOBILES
+            ? process.env.DINGTALK_AT_MOBILES.split(',')
+            : undefined,
+        });
+        logger.info('[Channel] DingTalk plugin registered');
+      }
+
+      // Register WeChat Work plugin
+      if (process.env.WECHAT_WORK_CORP_ID && process.env.WECHAT_WORK_AGENT_ID && process.env.WECHAT_WORK_CORP_SECRET) {
+        const wechatWorkPlugin = new WeChatWorkPlugin(agentRuntime, eventBus);
+        channelManager.register(wechatWorkPlugin, {
+          id: 'wechat-work',
+          name: 'WeChat Work',
+          enabled: true,
+          corpId: process.env.WECHAT_WORK_CORP_ID,
+          agentId: process.env.WECHAT_WORK_AGENT_ID,
+          corpSecret: process.env.WECHAT_WORK_CORP_SECRET,
+          toUser: process.env.WECHAT_WORK_TO_USER,
+          toParty: process.env.WECHAT_WORK_TO_PARTY,
+          toTag: process.env.WECHAT_WORK_TO_TAG,
+        });
+        logger.info('[Channel] WeChat Work plugin registered');
+      }
+
       await channelManager.startAll();
       notifier.start();
 
@@ -334,24 +369,24 @@ async function main() {
         try {
           await channelManager.sendMessage(msg);
         } catch (err) {
-          console.error(`[Channel] Failed to send outbound to ${msg.channel}:`, err);
+          logger.error(`[Channel] Failed to send outbound to ${msg.channel}`, err);
         }
       });
 
       // Listen for inbound messages and route to agent
       eventBus.on('message:inbound', (msg) => {
-        console.log(`[Channel] Inbound: ${msg.channel} | ${msg.text.substring(0, 50)}`);
+        logger.info(`[Channel] Inbound: ${msg.channel} | ${msg.text.substring(0, 50)}`);
       });
 
       dependencies.telegram = 'ok';
-      console.log('✅ Telegram 集成已启用 (Channel Plugin Architecture)');
+      logger.info('Telegram 集成已启用 (Channel Plugin Architecture)');
     } catch (error) {
       dependencies.telegram = 'error';
-      console.error('❌ Telegram 集成初始化失败:', error);
+      logger.error('Telegram 集成初始化失败', error);
     }
   } else {
     dependencies.telegram = 'disabled';
-    console.log('⚠️  Telegram 集成未启用 (缺少 TELEGRAM_BOT_TOKEN)');
+    logger.warn('Telegram 集成未启用 (缺少 TELEGRAM_BOT_TOKEN)');
   }
 
   let whatsappIntegration: WhatsAppIntegration | null = null;
@@ -374,14 +409,14 @@ async function main() {
 
       await whatsappIntegration.init();
       dependencies.whatsapp = 'ok';
-      console.log('✅ WhatsApp 集成已启用');
+      logger.info('WhatsApp 集成已启用');
     } catch (error) {
       dependencies.whatsapp = 'error';
-      console.error('❌ WhatsApp 集成初始化失败:', error);
+      logger.error('WhatsApp 集成初始化失败', error);
     }
   } else {
     dependencies.whatsapp = 'disabled';
-    console.log('⚠️  WhatsApp 集成未启用 (设置 WHATSAPP_ENABLED=true 以启用)');
+    logger.warn('WhatsApp 集成未启用 (设置 WHATSAPP_ENABLED=true 以启用)');
   }
 
   app.get('/health', (_req, res) => {
@@ -434,7 +469,7 @@ async function main() {
         res.json({ success: true, response, sessionId: resolvedSessionId });
       }
     } catch (error) {
-      console.error('Chat error:', error);
+      logger.error('Chat error', error);
       if (isStream && !res.writableEnded) {
         res.write(`data: ${JSON.stringify({ type: 'error', error: getErrorMessage(error) })}\n\n`);
         res.end();
@@ -480,7 +515,7 @@ async function main() {
         sessionId,
       });
     } catch (error) {
-      console.error('Chat history error:', error);
+      logger.error('Chat history error', error);
       sendError(res, 500, inferErrorCode(error), getErrorMessage(error));
     }
   });
@@ -823,37 +858,37 @@ async function main() {
   });
 
   server.listen(PORT, () => {
-    console.log(`✅ Node.js 后端已启动: http://localhost:${PORT}`);
-    console.log(`   WebSocket: ws://localhost:${PORT}/ws`);
-    console.log(`   Metrics: http://localhost:${PORT}/api/metrics`);
+    logger.info('Node.js 后端已启动', { url: `http://localhost:${PORT}`, port: PORT });
+    logger.info('WebSocket 服务已启动', { url: `ws://localhost:${PORT}/ws` });
+    logger.info('性能监控服务已启动', { url: `http://localhost:${PORT}/api/metrics` });
 
     // Start performance monitoring
     performanceMonitor.startCollection(60000); // Collect every minute
-    console.log('📊 Performance monitoring started');
+    logger.info('Performance monitoring started');
   });
 
   process.on('SIGINT', async () => {
-    console.log('\n正在关闭服务器...');
+    logger.info('正在关闭服务器...');
 
     // Stop cron scheduler
     try {
       cronScheduler.stop();
-      console.log('✅ Cron scheduler stopped');
+      logger.info('Cron scheduler stopped');
     } catch (err) {
-      console.error('❌ Error stopping cron scheduler:', err);
+      logger.error('Error stopping cron scheduler', err);
     }
 
     // Stop channel system (Telegram, future channels...)
     try {
       notifier.stop();
       await channelManager.stopAll('SIGINT shutdown');
-      console.log('✅ Channel system stopped');
+      logger.info('Channel system stopped');
     } catch (err) {
-      console.error('❌ Error stopping channel system:', err);
+      logger.error('Error stopping channel system', err);
     }
 
     if (whatsappIntegration) {
-      console.log('正在关闭 WhatsApp...');
+      logger.info('正在关闭 WhatsApp...');
       await whatsappIntegration.destroy();
     }
 
@@ -863,5 +898,5 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error('Fatal startup error:', error);
+  logger.fatal('Fatal startup error', error);
 });

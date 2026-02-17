@@ -17,6 +17,7 @@
 import { AgentRuntime } from '../../agent/runtime.js';
 import { Telegraf, Context, TelegramError } from 'telegraf';
 import { message } from 'telegraf/filters';
+import { logger } from '../../utils/logger.js';
 
 interface TelegramConfig {
   botToken: string;
@@ -87,7 +88,7 @@ export class TelegramIntegration {
         // 处理限流
         if (this.isRateLimited(error)) {
           const retryAfter = this.getRetryAfter(error);
-          console.log(`⏳ Telegram API 限流, ${retryAfter}s 后重试...`);
+          logger.info(`⏳ Telegram API 限流, ${retryAfter}s 后重试...`, { retryAfter });
           await this.sleep(retryAfter * 1000);
           continue;
         }
@@ -98,8 +99,7 @@ export class TelegramIntegration {
           maxDelay
         );
 
-        console.log(`⚠️ Telegram 操作失败 (${attempt + 1}/${maxRetries}), ${delay}ms 后重试:`,
-          (error as Error).message);
+        logger.warn(`⚠️ Telegram 操作失败 (${attempt + 1}/${maxRetries}), ${delay}ms 后重试: ${(error as Error).message}`, { attempt: attempt + 1, maxRetries, delay, error: (error as Error).message });
         
         await this.sleep(delay);
       }
@@ -183,11 +183,11 @@ export class TelegramIntegration {
   private setupErrorHandler(): void {
     // 全局错误捕获
     this.bot.catch(async (err: any, ctx: Context) => {
-      console.error('Telegram Bot 错误:', err);
+      logger.error('Telegram Bot 错误', err);
       
       // 如果是轮询错误，尝试重连
       if (err.message?.includes('polling')) {
-        console.log('检测到轮询错误，将尝试重连...');
+        logger.info('检测到轮询错误，将尝试重连...');
         return;
       }
 
@@ -197,7 +197,7 @@ export class TelegramIntegration {
           await ctx.reply('❌ 发生错误，请稍后再试');
         }
       } catch (replyError) {
-        console.error('发送错误通知失败:', replyError);
+        logger.error('发送错误通知失败', replyError);
       }
     });
   }
@@ -233,7 +233,7 @@ export class TelegramIntegration {
           }
         ));
       } catch (error) {
-        console.error('处理 /start 命令失败:', error);
+        logger.error('处理 /start 命令失败', error);
         await ctx.reply('❌ 服务暂时不可用，请稍后再试');
       }
     });
@@ -255,7 +255,7 @@ export class TelegramIntegration {
           '/clear - 清除对话历史'
         ));
       } catch (error) {
-        console.error('处理 /help 命令失败:', error);
+        logger.error('处理 /help 命令失败', error);
       }
     });
 
@@ -274,7 +274,7 @@ export class TelegramIntegration {
         
         await this.withRetry(() => ctx.reply(status));
       } catch (error) {
-        console.error('处理 /status 命令失败:', error);
+        logger.error('处理 /status 命令失败', error);
         await ctx.reply('❌ 获取状态失败');
       }
     });
@@ -285,7 +285,7 @@ export class TelegramIntegration {
         if (!this.isAuthorized(ctx.from?.id)) return;
         await this.handleWindowsRequest(ctx);
       } catch (error) {
-        console.error('处理 /windows 命令失败:', error);
+        logger.error('处理 /windows 命令失败', error);
         await ctx.reply('❌ 获取窗口列表失败，请检查 Python 服务是否运行');
       }
     });
@@ -296,7 +296,7 @@ export class TelegramIntegration {
         if (!this.isAuthorized(ctx.from?.id)) return;
         await this.handleScreenshotRequest(ctx);
       } catch (error) {
-        console.error('处理 /screenshot 命令失败:', error);
+        logger.error('处理 /screenshot 命令失败', error);
         await ctx.reply('❌ 截图失败，请检查 Python 服务是否运行');
       }
     });
@@ -314,7 +314,7 @@ export class TelegramIntegration {
 
         await this.handleChatMessage(ctx, text);
       } catch (error) {
-        console.error('处理 /chat 命令失败:', error);
+        logger.error('处理 /chat 命令失败', error);
         await ctx.reply('❌ 处理失败，请稍后再试');
       }
     });
@@ -347,7 +347,7 @@ export class TelegramIntegration {
 
         await ctx.reply(response);
       } catch (error) {
-        console.error('处理 /memory 命令失败:', error);
+        logger.error('处理 /memory 命令失败', error);
         await ctx.reply('❌ 搜索记忆失败');
       }
     });
@@ -358,7 +358,7 @@ export class TelegramIntegration {
         if (!this.isAuthorized(ctx.from?.id)) return;
         await this.withRetry(() => ctx.reply('🧹 对话历史已清除（功能待实现）'));
       } catch (error) {
-        console.error('处理 /clear 命令失败:', error);
+        logger.error('处理 /clear 命令失败', error);
       }
     });
 
@@ -396,7 +396,7 @@ export class TelegramIntegration {
         // 默认处理为聊天消息
         await this.handleChatMessage(ctx, text);
       } catch (error) {
-        console.error('处理消息失败:', error);
+        logger.error('处理消息失败', error);
         await ctx.reply('❌ 处理消息失败，请稍后再试');
       }
     });
@@ -422,7 +422,7 @@ export class TelegramIntegration {
         
         await ctx.answerCbQuery();
       } catch (error) {
-        console.error('处理回调查询失败:', error);
+        logger.error('处理回调查询失败', error);
         await ctx.answerCbQuery('操作失败');
       }
     });
@@ -478,7 +478,7 @@ export class TelegramIntegration {
     const userId = ctx.from?.id;
     const sessionId = `telegram_${userId}`;
 
-    console.log(`📨 收到 Telegram 消息: ${messageText.substring(0, 50)}...`);
+    logger.info(`📨 收到 Telegram 消息: ${messageText.substring(0, 50)}...`, { userId, messageLength: messageText.length });
 
     try {
       // 发送"正在输入"提示
@@ -510,7 +510,7 @@ export class TelegramIntegration {
         }
       }));
     } catch (error) {
-      console.error('处理 Telegram 消息失败:', error);
+      logger.error('处理 Telegram 消息失败', error);
       await ctx.reply('抱歉，处理消息时出错了，请稍后再试。');
     }
   }
@@ -538,12 +538,12 @@ export class TelegramIntegration {
     try {
       await this.doStart();
     } catch (error) {
-      console.error('启动 Telegram Bot 失败:', error);
+      logger.error('启动 Telegram Bot 失败', error);
       
       if (this.isRunning && this.reconnectAttempts < this.maxReconnectAttempts) {
         this.reconnectAttempts++;
         const delay = Math.min(5000 * this.reconnectAttempts, 60000);
-        console.log(`🔄 ${delay}ms 后尝试重连 (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
+        logger.info(`🔄 ${delay}ms 后尝试重连 (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`, { delay, reconnectAttempts: this.reconnectAttempts, maxReconnectAttempts: this.maxReconnectAttempts });
         
         await this.sleep(delay);
         await this.start();
@@ -565,13 +565,13 @@ export class TelegramIntegration {
           port: 0,
         }
       });
-      console.log(`🚀 Telegram Bot 已启动 (Webhook): ${this.config.webhookUrl}`);
+      logger.info(`🚀 Telegram Bot 已启动 (Webhook): ${this.config.webhookUrl}`, { mode: 'webhook', webhookUrl: this.config.webhookUrl });
     } else {
       // Long polling 模式
       await this.bot.launch({
         dropPendingUpdates: true, // 忽略启动前的消息
       });
-      console.log('🚀 Telegram Bot 已启动 (Long polling)');
+      logger.info('🚀 Telegram Bot 已启动 (Long polling)', { mode: 'long_polling' });
     }
 
     // 重置重连计数

@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "chubao-WIN-AI",
-    "version": "0.1.0",
+    "version": "0.3.0",
     "description": "Windows 本地 AI 自动化控制工具",
     "techStack": {
       "framework": "OpenClaw 二次开发",

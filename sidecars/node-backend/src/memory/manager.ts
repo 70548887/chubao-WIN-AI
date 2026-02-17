@@ -9,6 +9,7 @@
 import Database from 'better-sqlite3';
 import * as fs from 'fs';
 import * as path from 'path';
+import { logger } from '../utils/logger.js';
 
 export interface MemoryItem {
   id: number;
@@ -72,16 +73,16 @@ export class MemoryManager {
     // Ensure memory structure
     await this.ensureMemoryStructure();
 
-    console.log('Memory system initialized');
+    logger.info('Memory system initialized');
   }
 
   private async initVectorSearch(): Promise<void> {
     try {
       await import('sqlite-vec');
       this.hasVectorSearch = true;
-      console.log('Vector search enabled');
+      logger.info('Vector search enabled');
     } catch (error) {
-      console.log('Vector search not available, using text search');
+      logger.info('Vector search not available, using text search');
       this.hasVectorSearch = false;
     }
   }
@@ -221,7 +222,16 @@ export class MemoryManager {
 
     const summaryPath = path.join(entityPath, 'summary.md');
     const factsList = items.map(i => `- ${i.key}: ${i.value}`).join('\n');
-    const summary = `# ${entityName}\n\nCategory: ${category}\n\n## Facts\n\n${factsList}\n\n---\n*Last updated: ${new Date().toISOString()}*`;
+    const summary = `# ${entityName}
+
+Category: ${category}
+
+## Facts
+
+${factsList}
+
+---
+*Last updated: ${new Date().toISOString()}*`;
     
     fs.writeFileSync(summaryPath, summary);
   }
