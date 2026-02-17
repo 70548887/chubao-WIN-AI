@@ -27,6 +27,9 @@ import { TaskQueue } from './agent/taskQueue.js';
 import { CronScheduler } from './agent/cronScheduler.js';
 import { initializeSubagentRegistry } from './agent/subagentRegistry.js';
 import { initializeAgentRouter } from './agent/agentRouter.js';
+import { performanceMonitor } from './monitoring/performance.js';
+import { createMonitoringRouter } from './monitoring/routes.js';
+import { createPromptsRouter } from './prompts/routes.js';
 
 config();
 
@@ -149,6 +152,26 @@ async function main() {
   });
 
   app.use(express.json());
+
+  // Performance monitoring middleware
+  app.use((req, res, next) => {
+    const start = Date.now();
+    performanceMonitor.incrementConnections();
+
+    res.on('finish', () => {
+      const duration = Date.now() - start;
+      performanceMonitor.recordRequest(duration);
+      performanceMonitor.decrementConnections();
+    });
+
+    next();
+  });
+
+  // Monitoring routes
+  app.use('/api', createMonitoringRouter());
+
+  // Prompt templates routes
+  app.use('/api', createPromptsRouter());
 
   const server = createServer(app);
   const wss = new WebSocketServer({ server, path: '/ws' });
@@ -373,7 +396,7 @@ async function main() {
   });
 
   app.post('/api/chat', async (req, res) => {
-    const { message, sessionId } = req.body ?? {};
+    const { message, sessionId, stream } = req.body ?? {};
     if (typeof message !== 'string' || message.trim().length === 0) {
       sendError(res, 400, 'INVALID_ARGUMENT', 'message is required', {
         field: 'message',
@@ -387,12 +410,77 @@ async function main() {
       return;
     }
 
+    const isStream = stream === true;
+
     try {
       const resolvedSessionId = normalizeSessionId(sessionId) ?? `http_${createRequestId()}`;
-      const response = await agentRuntime.chat(message, resolvedSessionId);
-      res.json({ success: true, response, sessionId: resolvedSessionId });
+
+      if (isStream) {
+        // Stream response using Server-Sent Events
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+
+        const streamCallback = (chunk: string) => {
+          res.write(`data: ${JSON.stringify({ type: 'chunk', content: chunk })}\n\n`);
+        };
+
+        const response = await agentRuntime.chatStream(message, resolvedSessionId, streamCallback);
+        res.write(`data: ${JSON.stringify({ type: 'done', response, sessionId: resolvedSessionId })}\n\n`);
+        res.end();
+      } else {
+        // Non-streaming response
+        const response = await agentRuntime.chat(message, resolvedSessionId);
+        res.json({ success: true, response, sessionId: resolvedSessionId });
+      }
     } catch (error) {
       console.error('Chat error:', error);
+      if (isStream && !res.writableEnded) {
+        res.write(`data: ${JSON.stringify({ type: 'error', error: getErrorMessage(error) })}\n\n`);
+        res.end();
+      } else {
+        sendError(res, 500, inferErrorCode(error), getErrorMessage(error));
+      }
+    }
+  });
+
+  // Chat History API
+  app.get('/api/chat/history', async (req, res) => {
+    const sessionId = req.query.sessionId as string | undefined;
+    const limitValue = req.query.limit;
+    const limit = Number(limitValue ?? 50);
+
+    if (!Number.isFinite(limit) || limit <= 0 || limit > 1000) {
+      sendError(res, 400, 'INVALID_ARGUMENT', 'limit must be between 1 and 1000', {
+        field: 'limit',
+      });
+      return;
+    }
+
+    try {
+      const conversations = await memoryManager.getRecent('conversation', limit);
+
+      // Parse and filter by sessionId if provided
+      let messages = conversations.map((item) => {
+        try {
+          return JSON.parse(item.content);
+        } catch {
+          return null;
+        }
+      }).filter((item): item is NonNullable<typeof item> => item !== null);
+
+      if (sessionId) {
+        messages = messages.filter((m) => m.sessionId === sessionId);
+      }
+
+      res.json({
+        success: true,
+        messages,
+        count: messages.length,
+        sessionId,
+      });
+    } catch (error) {
+      console.error('Chat history error:', error);
       sendError(res, 500, inferErrorCode(error), getErrorMessage(error));
     }
   });
@@ -737,6 +825,11 @@ async function main() {
   server.listen(PORT, () => {
     console.log(`✅ Node.js 后端已启动: http://localhost:${PORT}`);
     console.log(`   WebSocket: ws://localhost:${PORT}/ws`);
+    console.log(`   Metrics: http://localhost:${PORT}/api/metrics`);
+
+    // Start performance monitoring
+    performanceMonitor.startCollection(60000); // Collect every minute
+    console.log('📊 Performance monitoring started');
   });
 
   process.on('SIGINT', async () => {

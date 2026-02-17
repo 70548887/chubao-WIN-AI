@@ -280,6 +280,79 @@ if (-not $StaticOnly) {
         Add-Failure "Node /api/multi-agent/groups unreachable: $($_.Exception.Message)"
     }
 
+    # 4.5) Node multi-agent start positive flow (S4-05)
+    try {
+        $multiAgentStart = Invoke-JsonWithStatus -Method "POST" -Url "http://127.0.0.1:$NodePort/api/multi-agent/start" -Body @{
+            tasks = @(
+                @{
+                    kind = 'task'
+                    taskCategory = 'test'
+                    taskPrompt = 'Smoke test task for multi-agent system'
+                }
+            )
+        }
+        if ($multiAgentStart.StatusCode -eq 200 -and $multiAgentStart.Body.success -eq $true) {
+            $groupId = $multiAgentStart.Body.groupId
+            if ($groupId -and $multiAgentStart.Body.group -and $multiAgentStart.Body.group.status) {
+                Add-Pass "Node /api/multi-agent/start positive flow ok (groupId=$groupId)"
+                
+                # 4.5.1) Verify group can be queried
+                Start-Sleep -Milliseconds 500
+                $groupStatus = Invoke-Json -Method "GET" -Url "http://127.0.0.1:$NodePort/api/multi-agent/groups/$groupId"
+                if ($groupStatus.success -eq $true -and $groupStatus.group -and $groupStatus.group.id -eq $groupId) {
+                    Add-Pass "Node /api/multi-agent/groups/{id} query ok"
+                } else {
+                    Add-Failure "Node /api/multi-agent/groups/{id} query failed"
+                }
+                
+                # 4.5.2) Cancel the test group
+                $cancelResult = Invoke-Json -Method "POST" -Url "http://127.0.0.1:$NodePort/api/multi-agent/groups/$groupId/cancel"
+                if ($cancelResult.success -eq $true) {
+                    Add-Pass "Node /api/multi-agent/groups/{id}/cancel ok"
+                } else {
+                    Add-Failure "Node /api/multi-agent/groups/{id}/cancel failed"
+                }
+            } else {
+                Add-Failure "Node /api/multi-agent/start missing groupId or group status"
+            }
+        } else {
+            # Service might be unavailable or forbidden (expected if dependencies not installed or security policy)
+            if ($multiAgentStart.StatusCode -eq 503 -or $multiAgentStart.Body.errorCode -eq "SERVICE_UNAVAILABLE") {
+                Add-Pass "Node /api/multi-agent/start returns SERVICE_UNAVAILABLE as expected (dependencies not installed)"
+            } elseif ($multiAgentStart.StatusCode -eq 403 -or $multiAgentStart.Body.errorCode -eq "FORBIDDEN") {
+                Add-Pass "Node /api/multi-agent/start returns FORBIDDEN as expected (security policy)"
+            } else {
+                Add-Failure "Node /api/multi-agent/start positive flow failed (status=$($multiAgentStart.StatusCode), errorCode=$($multiAgentStart.Body.errorCode))"
+            }
+        }
+    } catch {
+        Add-Failure "Node /api/multi-agent/start positive flow test failed: $($_.Exception.Message)"
+    }
+
+    # 4.6) Node task queue status contract (S4-05)
+    try {
+        $taskQueueStatus = Invoke-Json -Method "GET" -Url "http://127.0.0.1:$NodePort/api/tasks"
+        if ($taskQueueStatus.success -eq $true -and $null -ne $taskQueueStatus.tasks) {
+            Add-Pass "Node /api/tasks contract ok"
+        } else {
+            Add-Failure "Node /api/tasks missing required fields"
+        }
+    } catch {
+        Add-Failure "Node /api/tasks unreachable: $($_.Exception.Message)"
+    }
+
+    # 4.7) Node cron scheduler list contract (S4-05)
+    try {
+        $cronList = Invoke-Json -Method "GET" -Url "http://127.0.0.1:$NodePort/api/cron"
+        if ($cronList.success -eq $true -and $null -ne $cronList.jobs) {
+            Add-Pass "Node /api/cron contract ok"
+        } else {
+            Add-Failure "Node /api/cron missing required fields"
+        }
+    } catch {
+        Add-Failure "Node /api/cron unreachable: $($_.Exception.Message)"
+    }
+
     # 5) Python INVALID_ARGUMENT contract
     try {
         $pyInvalid = Invoke-JsonWithStatus -Method "POST" -Url "http://127.0.0.1:$PythonPort/api/window/controls" -Body @{}

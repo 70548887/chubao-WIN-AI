@@ -8,6 +8,7 @@
 import { MemoryManager } from '../memory/manager.js';
 import { ToolManager, toolManager } from '../tools/index.js';
 import { ToolSecurityGuard, type ToolSecurityPolicy } from './security.js';
+import { performanceMonitor } from '../monitoring/performance.js';
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import * as fsSync from 'node:fs';
@@ -975,6 +976,65 @@ export class AgentRuntime {
   }
 
   /**
+   * Stream chat response for real-time output.
+   * Simple implementation without tool calling for streaming.
+   */
+  async chatStream(
+    message: string,
+    sessionId: string,
+    onChunk: (chunk: string) => void,
+  ): Promise<string> {
+    const memories = await this.memoryManager.search(message, 5);
+    const systemPrompt = this.buildSystemPrompt(memories);
+
+    if (this.provider === 'anthropic' && this.anthropicClient) {
+      // Use Anthropic streaming
+      const stream = await this.anthropicClient.messages.create({
+        model: this.anthropicModelName,
+        max_tokens: 4096,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: message }],
+        stream: true,
+      });
+
+      let fullResponse = '';
+      for await (const chunk of stream) {
+        if (chunk.type === 'content_block_delta') {
+          const delta = chunk.delta as any;
+          if (delta && delta.text) {
+            const text = delta.text;
+            fullResponse += text;
+            onChunk(text);
+          }
+        }
+      }
+      return fullResponse;
+    } else if (this.provider === 'openai' && this.openaiClient) {
+      // Use OpenAI streaming
+      const stream = await this.openaiClient.chat.completions.create({
+        model: this.openaiModelName,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: message },
+        ],
+        stream: true,
+      });
+
+      let fullResponse = '';
+      for await (const chunk of stream) {
+        const text = chunk.choices[0]?.delta?.content || '';
+        if (text) {
+          fullResponse += text;
+          onChunk(text);
+        }
+      }
+      return fullResponse;
+    } else {
+      throw new Error(`Streaming not supported for provider: ${this.provider}`);
+    }
+  }
+
+  /**
    * Generic OpenAI-compatible chat method for third-party providers (e.g. OhMyGPT).
    * Full multi-turn tool loop via Responses API, same logic as chatOpenAI.
    */
@@ -1524,7 +1584,18 @@ export class AgentRuntime {
       );
     }
 
-    return await this.toolManager.executeTool(toolName, args);
+    // Record tool execution metrics
+    const startTime = Date.now();
+    try {
+      const result = await this.toolManager.executeTool(toolName, args);
+      const executionTime = Date.now() - startTime;
+      performanceMonitor.recordToolExecution(toolName, executionTime, true);
+      return result;
+    } catch (error) {
+      const executionTime = Date.now() - startTime;
+      performanceMonitor.recordToolExecution(toolName, executionTime, false);
+      throw error;
+    }
   }
 
   getAvailableTools(): { name: string; description: string }[] {

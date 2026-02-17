@@ -114,6 +114,23 @@ jobs:
       - name: Run node backend unit/integration tests
         run: npm run test:node-backend
 
+      - name: Upload test results on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-node-backend
+          path: |
+            sidecars/node-backend/test-results/
+            sidecars/node-backend/coverage/
+          retention-days: 7
+
+      - name: Output test summary on failure
+        if: failure()
+        run: |
+          echo "::error::Node backend tests failed. See uploaded artifacts for details."
+          echo "Test command: npm run test:node-backend"
+          echo "Local debug: cd sidecars/node-backend && npm run test"
+
   lint-smoke:
     name: lint-smoke
     runs-on: windows-latest

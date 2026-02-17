@@ -28,7 +28,10 @@
         "test:core": "vitest run src/core src/skills/coding",
         "test:core:watch": "vitest src/core src/skills/coding",
         "test:node-backend": "vitest run sidecars/node-backend/src/agent sidecars/node-backend/src/tools sidecars/node-backend/src/routes sidecars/node-backend/src/gateway sidecars/node-backend/src/channel sidecars/node-backend/src/memory sidecars/node-backend/src/coding",
-        "test:node-backend:watch": "vitest sidecars/node-backend/src/agent sidecars/node-backend/src/tools sidecars/node-backend/src/routes sidecars/node-backend/src/gateway sidecars/node-backend/src/channel sidecars/node-backend/src/memory sidecars/node-backend/src/coding"
+        "test:node-backend:watch": "vitest sidecars/node-backend/src/agent sidecars/node-backend/src/tools sidecars/node-backend/src/routes sidecars/node-backend/src/gateway sidecars/node-backend/src/channel sidecars/node-backend/src/memory sidecars/node-backend/src/coding",
+        "test:e2e": "playwright test",
+        "test:e2e:ui": "playwright test --ui",
+        "test:e2e:report": "playwright show-report"
     },
     "dependencies": {
         "@tauri-apps/api": "^2.0.0",
@@ -38,7 +41,9 @@
         "remark-gfm": "^4.0.1"
     },
     "devDependencies": {
+        "@playwright/test": "^1.58.2",
         "@tauri-apps/cli": "^2.0.0",
+        "@types/node": "^25.2.3",
         "@types/react": "^18.3.0",
         "@types/react-dom": "^18.3.0",
         "@vitejs/plugin-react": "^4.3.0",

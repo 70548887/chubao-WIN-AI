@@ -1,5 +1,6 @@
 ﻿import { useMemo } from 'react';
 import { analyzeCodingProgress } from '../skills/coding';
+import CliToolsSection from './settings/CliToolsSection';
 import CodingProgressSection from './settings/CodingProgressSection';
 import ContinuousDevSection from './settings/ContinuousDevSection';
 import DiagnosticsCompareSection from './settings/DiagnosticsCompareSection';
@@ -7,6 +8,7 @@ import ModelConfigSection from './settings/ModelConfigSection';
 import MultiAgentSection from './settings/MultiAgentSection';
 import ServiceLogsSection from './settings/ServiceLogsSection';
 import ServiceStatusSection from './settings/ServiceStatusSection';
+import { useCliToolsStatus } from './settings/useCliToolsStatus';
 import { useCodingProgress } from './settings/useCodingProgress';
 import { useContinuousDev } from './settings/useContinuousDev';
 import { useDiagnosticsCompare } from './settings/useDiagnosticsCompare';
@@ -41,6 +43,7 @@ function SettingsPanel() {
   const { t } = useLocale();
   const ISSUE_FILTER_LABELS = getIssueFilterLabels(t);
   const CODING_VELOCITY_LABELS = getVelocityLabels(t);
+  const cliTools = useCliToolsStatus();
   const {
     diagnostics,
     loading,
@@ -106,6 +109,13 @@ function SettingsPanel() {
           <input type="password" placeholder="sk-ant-..." />
         </label>
       </div>
+
+      <CliToolsSection
+        health={cliTools.health}
+        loading={cliTools.loading}
+        error={cliTools.error}
+        onRefresh={() => void cliTools.loadHealth()}
+      />
 
       <CodingProgressSection
         t={t}

@@ -16,11 +16,11 @@
 |---|---|---|---|---|---|---|
 | S4-01 | 为 `opencode.ts`/`ohmyopencode.ts` 增加单测（前台、后台、取消、列表） | Backend Agent A | 无 | A | `node ./node_modules/vitest/vitest.mjs run sidecars/node-backend/src/tools/opencode.test.ts sidecars/node-backend/src/tools/ohmyopencode.test.ts` | ✅ 完成 |
 | S4-02 | 为多 Agent 路由补充异常分支测试（4xx/5xx 映射） | Backend Agent A | S4-01 | A | `node ./node_modules/vitest/vitest.mjs run sidecars/node-backend/src/routes/multiAgent.test.ts` | ✅ 完成 |
-| S4-03 | 增加 OpenCode/OhMy CLI 健康探针（命令可用性 + 版本） | Backend Agent B | 无 | B | `node ./node_modules/vitest/vitest.mjs run sidecars/node-backend/src/tools/opencode.test.ts sidecars/node-backend/src/tools/ohmyopencode.test.ts` + `npm run smoke` | 进行中（已完成代码与单测，待 Python sidecar 恢复后完成全量 smoke） |
-| S4-04 | 将 CLI 健康态暴露到 `/api/tools` 与设置页状态摘要 | Backend Agent B + Frontend Agent | S4-03 | B | `npm run build` + `npm run smoke` | 待开始 |
-| S4-05 | smoke 增加 multi-agent 正向用例与关键契约断言 | QA Agent | S4-01,S4-03 | C | `npm run verify` | 待开始 |
-| S4-06 | 完成 Sprint 4 运维手册（故障定位、回滚、重试流程） | Docs Agent | S4-03,S4-05 | C | 文档评审 + `npm run verify:static` | 待开始 |
-| S4-07 | CI 补充 Node backend tests 阶段与失败日志输出 | QA Agent | S4-01,S4-02 | C | GitHub Actions `verify` 绿灯 | 待开始 |
+| S4-03 | 增加 OpenCode/OhMy CLI 健康探针（命令可用性 + 版本） | Backend Agent B | 无 | B | `node ./node_modules/vitest/vitest.mjs run sidecars/node-backend/src/tools/opencode.test.ts sidecars/node-backend/src/tools/ohmyopencode.test.ts` + `npm run smoke` | ✅ 完成 |
+| S4-04 | 将 CLI 健康态暴露到 `/api/tools` 与设置页状态摘要 | Backend Agent B + Frontend Agent | S4-03 | B | `npm run build` + `npm run smoke` | ✅ 完成 |
+| S4-05 | smoke 增加 multi-agent 正向用例与关键契约断言 | QA Agent | S4-01,S4-03 | C | `npm run verify` | ✅ 完成 |
+| S4-06 | 完成 Sprint 4 运维手册（故障定位、回滚、重试流程） | Docs Agent | S4-03,S4-05 | C | 文档评审 + `npm run verify:static` | ✅ 完成 |
+| S4-07 | CI 补充 Node backend tests 阶段与失败日志输出 | QA Agent | S4-01,S4-02 | C | GitHub Actions `verify` 绿灯 | ✅ 完成 |
 
 ## 并发节奏建议
 
