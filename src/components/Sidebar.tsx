@@ -1,9 +1,10 @@
 import { useLocale } from '../i18n';
 import { NotificationCenter } from './NotificationCenter';
+import { ThemeIconButton } from './ThemeToggle';
 
 interface SidebarProps {
-  activeTab: 'chat' | 'dashboard' | 'automation' | 'skills' | 'settings' | 'plugins' | 'platforms';
-  onTabChange: (tab: 'chat' | 'dashboard' | 'automation' | 'skills' | 'settings' | 'plugins' | 'platforms') => void;
+  activeTab: 'chat' | 'dashboard' | 'automation' | 'skills' | 'settings' | 'plugins' | 'platforms' | 'editor';
+  onTabChange: (tab: 'chat' | 'dashboard' | 'automation' | 'skills' | 'settings' | 'plugins' | 'platforms' | 'editor') => void;
 }
 
 function Sidebar({ activeTab, onTabChange }: SidebarProps) {
@@ -72,10 +73,19 @@ function Sidebar({ activeTab, onTabChange }: SidebarProps) {
           <span className="icon">📱</span>
           <span className="label">平台</span>
         </button>
+
+        <button
+          className={`nav-item ${activeTab === 'editor' ? 'active' : ''}`}
+          onClick={() => onTabChange('editor')}
+        >
+          <span className="icon">📝</span>
+          <span className="label">编辑器</span>
+        </button>
       </div>
 
       <div className="sidebar-footer">
         <NotificationCenter />
+        <ThemeIconButton />
         <button
           className="locale-toggle"
           onClick={() => setLocale(locale === 'zh-CN' ? 'en' : 'zh-CN')}

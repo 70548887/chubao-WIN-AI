@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "chubao.skill.v1",
+  "id": "chubao.windows-automation",
+  "name": "Windows Automation",
+  "version": "0.1.0",
+  "description": "Windows GUI 自动化 - 鼠标点击、键盘输入、窗口操作、应用控制",
+  "entry": "./windows-automation.mjs",
+  "toolsExport": "skillTools",
+  "enabled": true,
+  "tags": [
+    "automation",
+    "windows",
+    "gui"
+  ]
+}

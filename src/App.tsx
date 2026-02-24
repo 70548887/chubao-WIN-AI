@@ -11,9 +11,11 @@ import { PluginManagerPanel } from './components/PluginManager';
 import { DingTalkConfig } from './components/DingTalkConfig';
 import { WeChatWorkConfig } from './components/WeChatWorkConfig';
 import { initializePluginManager } from './core/plugin/PluginManager';
+import { useThemeShortcut } from './hooks/useThemeShortcut';
+import EditorPanel from './components/EditorPanel';
 import type { PluginContext } from './core/plugin/types';
 
-type ActiveTab = 'chat' | 'dashboard' | 'automation' | 'skills' | 'settings' | 'plugins' | 'platforms';
+type ActiveTab = 'chat' | 'dashboard' | 'automation' | 'skills' | 'settings' | 'plugins' | 'platforms' | 'editor';
 
 function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('chat');
@@ -67,6 +69,9 @@ function App() {
     initializePluginManager(context);
   }, []);
 
+  // 启用主题快捷键
+  useThemeShortcut();
+
   return (
     <div className="app">
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
@@ -85,6 +90,7 @@ function App() {
             <WeChatWorkConfig />
           </div>
         )}
+        {activeTab === 'editor' && <EditorPanel />}
       </main>
       <ToastContainer />
       <PerformancePanel />

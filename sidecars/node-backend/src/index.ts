@@ -31,6 +31,10 @@ import { performanceMonitor } from './monitoring/performance.js';
 import { createMonitoringRouter } from './monitoring/routes.js';
 import { createPromptsRouter } from './prompts/routes.js';
 import { logger } from './utils/logger.js';
+import skillsRouter from './api/skills.js';
+import voiceRouter from './api/voice.js';
+import upgradeRouter from './api/upgrade.js';
+import filesRouter from './api/files.js';
 
 config();
 
@@ -173,6 +177,18 @@ async function main() {
 
   // Prompt templates routes
   app.use('/api', createPromptsRouter());
+
+  // Skills management routes
+  app.use('/api/skills', skillsRouter);
+
+  // Voice processing routes
+  app.use('/api/voice', voiceRouter);
+
+  // Upgrade routes
+  app.use('/api/upgrade', upgradeRouter);
+
+  // File management routes
+  app.use('/api/files', filesRouter);
 
   const server = createServer(app);
   const wss = new WebSocketServer({ server, path: '/ws' });
@@ -742,6 +758,9 @@ async function main() {
         anthropicModel: typeof body.anthropicModel === 'string' ? body.anthropicModel : undefined,
         anthropicBaseUrl: typeof body.anthropicBaseUrl === 'string' ? body.anthropicBaseUrl : undefined,
         anthropicApiKey: typeof body.anthropicApiKey === 'string' ? body.anthropicApiKey : undefined,
+        ohmygptModel: typeof body.ohmygptModel === 'string' ? body.ohmygptModel : undefined,
+        ohmygptBaseUrl: typeof body.ohmygptBaseUrl === 'string' ? body.ohmygptBaseUrl : undefined,
+        ohmygptApiKey: typeof body.ohmygptApiKey === 'string' ? body.ohmygptApiKey : undefined,
       });
       res.json({ success: true, config: agentRuntime.getModelConfig() });
     } catch (error) {

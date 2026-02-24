@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "chubao.skill.v1",
+  "id": "chubao.screenshot-master",
+  "name": "Screenshot Master",
+  "version": "0.1.0",
+  "description": "屏幕截图工具 - 全屏截图、区域截图、窗口截图,支持多显示器",
+  "entry": "./screenshot-master.mjs",
+  "toolsExport": "skillTools",
+  "enabled": true,
+  "tags": [
+    "screenshot",
+    "capture",
+    "vision"
+  ]
+}

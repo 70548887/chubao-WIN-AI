@@ -209,19 +209,21 @@ export const menuSelectTool: Tool = {
 
 export const screenshotTool: Tool = {
   name: 'screenshot',
-  description: 'Take a screenshot of the screen or specific window',
+  description: 'Take a screenshot of the screen or specific window, and perform local OCR to extract text. Returns both the screenshot path and recognized text content.',
   parameters: z.object({
     windowTitle: z.string().optional().describe('Window title (optional)'),
+    includeOcr: z.boolean().optional().describe('Include OCR text recognition (default: true)'),
   }),
-  execute: async (args: { windowTitle?: string }) => {
+  execute: async (args: { windowTitle?: string; includeOcr?: boolean }) => {
+    // Step 1: Take screenshot
     const response = await fetchWithRetry(`${PYTHON_SERVICE_URL}/api/screenshot`, {
       method: 'POST',
-      body: JSON.stringify(args),
+      body: JSON.stringify({ window_title: args.windowTitle }),
     });
     const data = await response.json();
     if (!data.success) throw new Error(data.message || data.error || 'Screenshot failed');
-    // 返回完整的截图数据，包括 base64 和坐标映射信息
-    return {
+
+    const screenshotResult = {
       path: data.result?.path || data.path,
       base64: data.result?.base64 || data.base64,
       media_type: data.result?.media_type || 'image/png',
@@ -230,6 +232,37 @@ export const screenshotTool: Tool = {
       scale_x: data.result?.scale_x,
       scale_y: data.result?.scale_y,
     };
+
+    // Step 2: Perform OCR on the screenshot (if enabled, default true)
+    console.log(`[screenshot] includeOcr=${args.includeOcr}, path=${screenshotResult.path}`);
+    if (args.includeOcr !== false) {
+      try {
+        console.log(`[screenshot] Starting OCR for ${screenshotResult.path}`);
+        const ocrResponse = await fetchWithRetry(`${PYTHON_SERVICE_URL}/api/ocr`, {
+          method: 'POST',
+          body: JSON.stringify({ image_path: screenshotResult.path }),
+        }, 60000); // 60s timeout for OCR
+        const ocrData = await ocrResponse.json();
+        console.log(`[screenshot] OCR response: success=${ocrData.success}, hasResult=${!!ocrData.result}`);
+        if (ocrData.success && ocrData.result) {
+          // OCR returns { texts: [...], count: N, image_path: ... }
+          // Convert texts array to a single string
+          const texts = ocrData.result.texts || [];
+          const ocrText = texts.map((t: any) => t.text).join('\n');
+          console.log(`[screenshot] OCR succeeded: ${texts.length} regions, ${ocrText.length} chars`);
+          return {
+            ...screenshotResult,
+            ocr_text: ocrText,
+            ocr_regions: texts,
+          };
+        }
+      } catch (ocrErr) {
+        // OCR failure shouldn't break screenshot functionality
+        console.warn('[screenshot] OCR failed:', ocrErr);
+      }
+    }
+
+    return screenshotResult;
   },
 };
 

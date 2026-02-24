@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "chubao.skill.v1",
+  "id": "chubao.ocr-expert",
+  "name": "OCR Expert",
+  "version": "0.1.0",
+  "description": "光学字符识别 - 从图片中提取文字,支持中英文混合识别",
+  "entry": "./ocr-expert.mjs",
+  "toolsExport": "skillTools",
+  "enabled": true,
+  "tags": [
+    "ocr",
+    "vision",
+    "text-extraction"
+  ]
+}

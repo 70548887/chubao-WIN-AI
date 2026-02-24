@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "chubao.skill.v1",
+  "id": "chubao.file-manager",
+  "name": "File Manager",
+  "version": "0.1.0",
+  "description": "文件系统管理 - 读取、写入、移动、删除文件和目录",
+  "entry": "./file-manager.mjs",
+  "toolsExport": "skillTools",
+  "enabled": true,
+  "tags": [
+    "filesystem",
+    "files",
+    "io"
+  ]
+}

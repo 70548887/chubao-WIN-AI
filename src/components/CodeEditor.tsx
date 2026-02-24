@@ -1,288 +1,186 @@
-import { useState, useCallback, useRef } from 'react';
+/**
+ * Code Editor Component - 代码编辑器组件
+ *
+ * 基于 Monaco Editor 的代码编辑功能
+ */
+
+import React, { useRef, useCallback } from 'react';
 import Editor from '@monaco-editor/react';
 import type { editor } from 'monaco-editor';
+import { useTheme } from '../contexts/ThemeContext';
 
-export type EditorLanguage =
-  | 'javascript'
-  | 'typescript'
-  | 'python'
-  | 'java'
-  | 'cpp'
-  | 'c'
-  | 'csharp'
-  | 'go'
-  | 'rust'
-  | 'php'
-  | 'ruby'
-  | 'swift'
-  | 'kotlin'
-  | 'html'
-  | 'css'
-  | 'json'
-  | 'yaml'
-  | 'markdown'
-  | 'sql'
-  | 'powershell'
-  | 'shell'
-  | 'plaintext';
+// 文件扩展名到语言的映射
+const EXT_TO_LANGUAGE: Record<string, string> = {
+  // TypeScript/JavaScript
+  '.ts': 'typescript',
+  '.tsx': 'typescript',
+  '.js': 'javascript',
+  '.jsx': 'javascript',
+  '.mjs': 'javascript',
+  // Python
+  '.py': 'python',
+  '.pyw': 'python',
+  // Web
+  '.html': 'html',
+  '.htm': 'html',
+  '.css': 'css',
+  '.scss': 'scss',
+  '.less': 'less',
+  '.json': 'json',
+  // 配置
+  '.yaml': 'yaml',
+  '.yml': 'yaml',
+  '.toml': 'toml',
+  '.ini': 'ini',
+  // 文档
+  '.md': 'markdown',
+  '.mdx': 'markdown',
+  // Shell
+  '.sh': 'shell',
+  '.bash': 'shell',
+  '.zsh': 'shell',
+  '.ps1': 'powershell',
+  '.psm1': 'powershell',
+  // Rust
+  '.rs': 'rust',
+  // Go
+  '.go': 'go',
+  // Java
+  '.java': 'java',
+  // C/C++
+  '.c': 'c',
+  '.cpp': 'cpp',
+  '.h': 'c',
+  '.hpp': 'cpp',
+  // 其他
+  '.sql': 'sql',
+  '.xml': 'xml',
+  '.dockerfile': 'dockerfile',
+  '.gitignore': 'ignore',
+};
 
 interface CodeEditorProps {
-  value?: string;
+  /** 文件路径 */
+  filePath: string;
+  /** 文件内容 */
+  value: string;
+  /** 内容变化回调 */
   onChange?: (value: string) => void;
-  language?: EditorLanguage;
-  height?: string;
+  /** 是否只读 */
   readOnly?: boolean;
-  theme?: 'vs' | 'vs-dark' | 'hc-black';
-  onSave?: (value: string) => void;
-  onRun?: (value: string) => void;
+  /** 自定义类名 */
+  className?: string;
 }
 
-const LANGUAGE_OPTIONS: { value: EditorLanguage; label: string }[] = [
-  { value: 'typescript', label: 'TypeScript' },
-  { value: 'javascript', label: 'JavaScript' },
-  { value: 'python', label: 'Python' },
-  { value: 'java', label: 'Java' },
-  { value: 'cpp', label: 'C++' },
-  { value: 'c', label: 'C' },
-  { value: 'csharp', label: 'C#' },
-  { value: 'go', label: 'Go' },
-  { value: 'rust', label: 'Rust' },
-  { value: 'php', label: 'PHP' },
-  { value: 'ruby', label: 'Ruby' },
-  { value: 'swift', label: 'Swift' },
-  { value: 'kotlin', label: 'Kotlin' },
-  { value: 'html', label: 'HTML' },
-  { value: 'css', label: 'CSS' },
-  { value: 'json', label: 'JSON' },
-  { value: 'yaml', label: 'YAML' },
-  { value: 'markdown', label: 'Markdown' },
-  { value: 'sql', label: 'SQL' },
-  { value: 'powershell', label: 'PowerShell' },
-  { value: 'shell', label: 'Shell' },
-  { value: 'plaintext', label: 'Plain Text' },
-];
+/**
+ * 根据文件路径获取语言
+ */
+function getLanguageFromPath(filePath: string): string {
+  const ext = filePath.toLowerCase().match(/\.[^.]+$/)?.[0] || '';
+  
+  // 特殊文件名处理
+  const basename = filePath.split('/').pop()?.toLowerCase() || '';
+  if (basename === 'dockerfile') return 'dockerfile';
+  if (basename === '.gitignore') return 'ignore';
+  if (basename === 'makefile') return 'makefile';
+  
+  return EXT_TO_LANGUAGE[ext] || 'plaintext';
+}
 
-export function CodeEditor({
-  value = '',
+export const CodeEditor: React.FC<CodeEditorProps> = ({
+  filePath,
+  value,
   onChange,
-  language = 'typescript',
-  height = '400px',
   readOnly = false,
-  theme = 'vs-dark',
-  onSave,
-  onRun,
-}: CodeEditorProps) {
-  const [currentLanguage, setCurrentLanguage] = useState<EditorLanguage>(language);
-  const [currentValue, setCurrentValue] = useState(value);
+  className = '',
+}) => {
+  const { effectiveTheme } = useTheme();
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
 
+  const language = getLanguageFromPath(filePath);
+  const isDark = effectiveTheme === 'dark';
+
+  /**
+   * 编辑器挂载回调
+   */
   const handleEditorDidMount = useCallback((editor: editor.IStandaloneCodeEditor) => {
     editorRef.current = editor;
 
     // 添加快捷键
-    editor.addCommand(2048 | 49, () => {
-      // Ctrl+S
-      onSave?.(editor.getValue());
-    });
-
-    editor.addCommand(2048 | 52, () => {
-      // Ctrl+R
-      onRun?.(editor.getValue());
-    });
-  }, [onSave, onRun]);
-
-  const handleChange = useCallback(
-    (newValue: string | undefined) => {
-      const val = newValue || '';
-      setCurrentValue(val);
-      onChange?.(val);
-    },
-    [onChange]
-  );
-
-  const handleLanguageChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
-    setCurrentLanguage(e.target.value as EditorLanguage);
-  }, []);
-
-  const handleFormat = useCallback(() => {
-    editorRef.current?.getAction('editor.action.formatDocument')?.run();
-  }, []);
-
-  const handleCopy = useCallback(() => {
-    navigator.clipboard.writeText(currentValue);
-  }, [currentValue]);
-
-  const handleClear = useCallback(() => {
-    setCurrentValue('');
-    onChange?.('');
-  }, [onChange]);
-
-  return (
-    <div className="code-editor">
-      <div className="editor-toolbar">
-        <div className="toolbar-left">
-          <select
-            value={currentLanguage}
-            onChange={handleLanguageChange}
-            className="language-select"
-          >
-            {LANGUAGE_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-          <span className="char-count">{currentValue.length} 字符</span>
-        </div>
-        <div className="toolbar-right">
-          <button className="toolbar-btn" onClick={handleFormat} title="格式化 (Ctrl+Shift+F)">
-            ✨ 格式化
-          </button>
-          <button className="toolbar-btn" onClick={handleCopy} title="复制">
-            📋 复制
-          </button>
-          <button className="toolbar-btn" onClick={handleClear} title="清空">
-            🗑️ 清空
-          </button>
-          {onSave && (
-            <button className="toolbar-btn primary" onClick={() => onSave(currentValue)} title="保存 (Ctrl+S)">
-              💾 保存
-            </button>
-          )}
-          {onRun && (
-            <button className="toolbar-btn success" onClick={() => onRun(currentValue)} title="运行 (Ctrl+R)">
-              ▶️ 运行
-            </button>
-          )}
-        </div>
-      </div>
-      <Editor
-        height={height}
-        language={currentLanguage}
-        value={currentValue}
-        theme={theme}
-        onChange={handleChange}
-        onMount={handleEditorDidMount}
-        options={{
-          readOnly,
-          minimap: { enabled: true },
-          fontSize: 14,
-          lineNumbers: 'on',
-          roundedSelection: false,
-          scrollBeyondLastLine: false,
-          automaticLayout: true,
-          tabSize: 2,
-          wordWrap: 'on',
-          folding: true,
-          renderWhitespace: 'selection',
-          bracketPairColorization: { enabled: true },
-          formatOnPaste: true,
-          formatOnType: true,
-        }}
-      />
-    </div>
-  );
-}
-
-// 代码对比组件
-interface CodeDiffProps {
-  original: string;
-  modified: string;
-  language?: EditorLanguage;
-  height?: string;
-}
-
-export function CodeDiff({
-  original,
-  modified,
-  language = 'typescript',
-  height = '400px',
-}: CodeDiffProps) {
-  const diffText = `--- 原始\n+++ 修改\n\n${modified}`;
-  
-  return (
-    <div className="code-diff">
-      <div className="diff-header">
-        <span>代码对比</span>
-      </div>
-      <Editor
-        height={height}
-        language={language}
-        value={diffText}
-        theme="vs-dark"
-        options={{
-          readOnly: true,
-          minimap: { enabled: false },
-          lineNumbers: 'on',
-        }}
-      />
-    </div>
-  );
-}
-
-// 代码片段组件
-interface CodeSnippetProps {
-  code: string;
-  language?: EditorLanguage;
-  title?: string;
-  collapsible?: boolean;
-}
-
-export function CodeSnippet({
-  code,
-  language = 'typescript',
-  title,
-  collapsible = true,
-}: CodeSnippetProps) {
-  const [isExpanded, setIsExpanded] = useState(true);
-  const [isCopied, setIsCopied] = useState(false);
-
-  const handleCopy = useCallback(async () => {
-    await navigator.clipboard.writeText(code);
-    setIsCopied(true);
-    setTimeout(() => setIsCopied(false), 2000);
-  }, [code]);
-
-  if (!isExpanded && collapsible) {
-    return (
-      <div className="code-snippet collapsed">
-        <div className="snippet-header" onClick={() => setIsExpanded(true)}>
-          <span className="snippet-title">{title || language}</span>
-          <span className="expand-hint">点击展开</span>
-        </div>
-      </div>
+    editor.addCommand(
+      // Ctrl+S / Cmd+S
+      (window as any).monaco.KeyMod.CtrlCmd | (window as any).monaco.KeyCode.KeyS,
+      () => {
+        // 触发保存事件
+        const event = new CustomEvent('editor:save', { detail: { filePath } });
+        window.dispatchEvent(event);
+      }
     );
-  }
+
+    // 添加格式化快捷键
+    editor.addCommand(
+      // Shift+Alt+F
+      (window as any).monaco.KeyMod.Shift | (window as any).monaco.KeyMod.Alt | (window as any).monaco.KeyCode.KeyF,
+      () => {
+        editor.getAction('editor.action.formatDocument')?.run();
+      }
+    );
+  }, [filePath]);
+
+  /**
+   * 编辑器配置
+   */
+  const editorOptions: editor.IStandaloneEditorConstructionOptions = {
+    readOnly,
+    minimap: { enabled: true },
+    fontSize: 14,
+    fontFamily: "'Fira Code', 'Consolas', 'Monaco', monospace",
+    fontLigatures: true,
+    lineNumbers: 'on',
+    roundedSelection: false,
+    scrollBeyondLastLine: false,
+    automaticLayout: true,
+    tabSize: 2,
+    insertSpaces: true,
+    wordWrap: 'on',
+    folding: true,
+    renderWhitespace: 'selection',
+    bracketPairColorization: { enabled: true },
+    guides: {
+      bracketPairs: true,
+      indentation: true,
+    },
+    quickSuggestions: true,
+    suggestOnTriggerCharacters: true,
+    acceptSuggestionOnEnter: 'on',
+    formatOnPaste: true,
+    formatOnType: true,
+  };
 
   return (
-    <div className="code-snippet">
-      <div className="snippet-header">
-        <span className="snippet-title">{title || language}</span>
-        <div className="snippet-actions">
-          <button className="snippet-btn" onClick={handleCopy}>
-            {isCopied ? '✓ 已复制' : '📋 复制'}
-          </button>
-          {collapsible && (
-            <button className="snippet-btn" onClick={() => setIsExpanded(false)}>
-              收起
-            </button>
-          )}
-        </div>
-      </div>
+    <div className={`h-full w-full ${className}`}>
       <Editor
-        height="200px"
+        height="100%"
         language={language}
-        value={code}
-        theme="vs-dark"
-        options={{
-          readOnly: true,
-          minimap: { enabled: false },
-          fontSize: 12,
-          lineNumbers: 'off',
-          scrollBeyondLastLine: false,
-          automaticLayout: true,
-        }}
+        value={value}
+        theme={isDark ? 'vs-dark' : 'light'}
+        options={editorOptions}
+        onChange={(value) => onChange?.(value || '')}
+        onMount={handleEditorDidMount}
+        loading={
+          <div className="flex items-center justify-center h-full text-[var(--text-secondary)]">
+            <div className="flex items-center gap-2">
+              <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+              <span>加载编辑器...</span>
+            </div>
+          </div>
+        }
       />
     </div>
   );
-}
+};
+
+export default CodeEditor;

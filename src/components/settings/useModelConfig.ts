@@ -7,9 +7,10 @@ export interface ModelProviderInfo {
 }
 
 export interface ModelConfig {
-  provider: 'openai' | 'anthropic';
+  provider: 'openai' | 'anthropic' | 'ohmygpt';
   openai: ModelProviderInfo;
   anthropic: ModelProviderInfo;
+  ohmygpt: ModelProviderInfo;
 }
 
 interface ModelConfigState {

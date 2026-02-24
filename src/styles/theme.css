@@ -1,0 +1,211 @@
+/**
+ * Theme System - CSS Variables
+ * 
+ * 定义亮色/暗色主题的 CSS 自定义属性
+ */
+
+/* ============================================
+   基础变量（亮色主题 - 默认）
+   ============================================ */
+:root {
+  /* 背景色 */
+  --bg-primary: #f8fafc;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f1f5f9;
+  --bg-hover: rgba(0, 0, 0, 0.04);
+  --bg-active: rgba(0, 0, 0, 0.08);
+  --bg-overlay: rgba(0, 0, 0, 0.5);
+  
+  /* 兼容旧变量名 */
+  --bg-dark: #f8fafc;
+  --bg-card: #ffffff;
+  --bg-input: #f1f5f9;
+  
+  /* 文字色 */
+  --text-primary: #1e293b;
+  --text-secondary: #64748b;
+  --text-tertiary: #94a3b8;
+  --text-disabled: #c0c0c0;
+  --text-inverse: #ffffff;
+  
+  /* 边框色 */
+  --border-color: #e2e8f0;
+  --border-color-strong: #cbd5e1;
+  --border-color-weak: #f1f5f9;
+  
+  /* 兼容旧变量名 */
+  --border: #e2e8f0;
+  
+  /* 主题色 */
+  --accent-color: #6366f1;
+  --accent-color-hover: #4f46e5;
+  --accent-color-active: #4338ca;
+  --accent-color-light: rgba(99, 102, 241, 0.1);
+  
+  /* 兼容旧变量名 */
+  --primary: #6366f1;
+  --primary-dark: #4f46e5;
+  
+  /* 功能色 */
+  --success-color: #10b981;
+  --warning-color: #f59e0b;
+  --error-color: #ef4444;
+  --info-color: #3b82f6;
+  
+  /* 兼容旧变量名 */
+  --success: #10b981;
+  --warning: #f59e0b;
+  --error: #ef4444;
+  --info: #3b82f6;
+  
+  /* 阴影 */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.15);
+  
+  /* 代码块 */
+  --code-bg: #f6f8fa;
+  --code-text: #24292e;
+  --code-border: #e1e4e8;
+  
+  /* 滚动条 */
+  --scrollbar-bg: #f1f1f1;
+  --scrollbar-thumb: #c1c1c1;
+  --scrollbar-thumb-hover: #a8a8a8;
+  
+  /* 输入框 */
+  --input-bg: #ffffff;
+  --input-border: #d9d9d9;
+  --input-focus-border: var(--accent-color);
+  --input-placeholder: #bfbfbf;
+  
+  /* 消息气泡 */
+  --message-user-bg: var(--accent-color-light);
+  --message-ai-bg: var(--bg-secondary);
+  --message-border: var(--border-color);
+  
+  /* 侧边栏 */
+  --sidebar-bg: var(--bg-secondary);
+  --sidebar-active: var(--accent-color-light);
+  
+  /* 过渡动画 */
+  --transition-fast: 150ms ease;
+  --transition-normal: 300ms ease;
+  --transition-slow: 500ms ease;
+}
+
+/* ============================================
+   暗色主题
+   ============================================ */
+[data-theme="dark"] {
+  /* 背景色 */
+  --bg-primary: #1a1a2e;
+  --bg-secondary: #16213e;
+  --bg-tertiary: #0f3460;
+  --bg-hover: rgba(255, 255, 255, 0.05);
+  --bg-active: rgba(255, 255, 255, 0.1);
+  --bg-overlay: rgba(0, 0, 0, 0.7);
+  
+  /* 兼容旧变量名 */
+  --bg-dark: #1a1a2e;
+  --bg-card: #16213e;
+  --bg-input: #0f3460;
+  
+  /* 文字色 */
+  --text-primary: #f1f1f1;
+  --text-secondary: #a1a1aa;
+  --text-tertiary: #71717a;
+  --text-disabled: #52525b;
+  --text-inverse: #1a1a2e;
+  
+  /* 边框色 */
+  --border-color: #374151;
+  --border-color-strong: #4b5563;
+  --border-color-weak: #1f2937;
+  
+  /* 兼容旧变量名 */
+  --border: #374151;
+  
+  /* 主题色 */
+  --accent-color: #818cf8;
+  --accent-color-hover: #a5b4fc;
+  --accent-color-active: #c7d2fe;
+  --accent-color-light: rgba(129, 140, 248, 0.15);
+  
+  /* 兼容旧变量名 */
+  --primary: #818cf8;
+  --primary-dark: #6366f1;
+  
+  /* 功能色（暗色主题稍微调亮） */
+  --success-color: #34d399;
+  --warning-color: #fbbf24;
+  --error-color: #f87171;
+  --info-color: #60a5fa;
+  
+  /* 兼容旧变量名 */
+  --success: #34d399;
+  --warning: #fbbf24;
+  --error: #f87171;
+  --info: #60a5fa;
+  
+  /* 阴影（暗色主题更柔和） */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+  
+  /* 代码块 */
+  --code-bg: #16213e;
+  --code-text: #f1f1f1;
+  --code-border: #374151;
+  
+  /* 滚动条 */
+  --scrollbar-bg: #16213e;
+  --scrollbar-thumb: #4b5563;
+  --scrollbar-thumb-hover: #6b7280;
+  
+  /* 输入框 */
+  --input-bg: #0f3460;
+  --input-border: #374151;
+  --input-focus-border: var(--accent-color);
+  --input-placeholder: #6b7280;
+  
+  /* 消息气泡 */
+  --message-user-bg: var(--accent-color-light);
+  --message-ai-bg: var(--bg-secondary);
+  --message-border: var(--border-color);
+  
+  /* 侧边栏 */
+  --sidebar-bg: var(--bg-secondary);
+  --sidebar-active: var(--accent-color-light);
+}
+
+/* ============================================
+   过渡动画
+   ============================================ */
+* {
+  transition: background-color var(--transition-normal),
+              border-color var(--transition-normal),
+              color var(--transition-fast),
+              box-shadow var(--transition-normal);
+}
+
+/* 禁用某些元素的过渡动画（性能优化） */
+.no-transition,
+.no-transition * {
+  transition: none !important;
+}
+
+/* ============================================
+   系统主题自动检测（备用方案）
+   ============================================ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-theme="dark"]) {
+    color-scheme: dark;
+  }
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="light"]):not([data-theme="dark"]) {
+    color-scheme: light;
+  }
+}

@@ -168,19 +168,26 @@ const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'http://localhost:3
 async function fetchWithRetry(
   url: string,
   options: RequestInit = {},
-  maxRetries = 3
+  maxRetries = 3,
+  timeoutMs?: number
 ): Promise<Response> {
   let lastError: Error | undefined;
 
   for (let i = 0; i < maxRetries; i++) {
     try {
+      const controller = new AbortController();
+      const timeoutId = timeoutMs ? setTimeout(() => controller.abort(), timeoutMs) : undefined;
+      
       const response = await fetch(url, {
         ...options,
         headers: {
           'Content-Type': 'application/json',
           ...options.headers,
         },
+        signal: controller.signal,
       });
+      
+      if (timeoutId) clearTimeout(timeoutId);
       return response;
     } catch (error) {
       lastError = error as Error;
@@ -800,7 +807,7 @@ export const menuSelectTool: Tool = {
  */
 export const screenshotTool: Tool = {
   name: 'screenshot',
-  description: 'Capture screen or specified window',
+  description: 'Capture screen or specified window. Includes OCR text extraction (may take 30-60s on first use for model initialization).',
   parameters: z.object({
     windowTitle: z.string().optional().describe('Window title (omit for fullscreen)'),
     region: z.object({
@@ -811,13 +818,16 @@ export const screenshotTool: Tool = {
     }).optional().describe('Screenshot region'),
     modelWidth: z.number().int().min(1).optional().describe('Model viewport width for coordinate scaling'),
     modelHeight: z.number().int().min(1).optional().describe('Model viewport height for coordinate scaling'),
+    includeOcr: z.boolean().optional().describe('Include OCR text recognition (default: true, first use may take 60s for initialization)'),
   }),
   execute: async (args: {
     windowTitle?: string;
     region?: any;
     modelWidth?: number;
     modelHeight?: number;
+    includeOcr?: boolean;
   }) => {
+    // Step 1: Take screenshot
     const response = await fetchWithRetry(`${PYTHON_SERVICE_URL}/api/screenshot`, {
       method: 'POST',
       body: JSON.stringify({
@@ -833,7 +843,7 @@ export const screenshotTool: Tool = {
       throw new Error(data.error || 'Screenshot failed');
     }
 
-    return {
+    const screenshotResult = {
       path: data.result.path,
       size: data.result.size,
       base64: data.result.base64,
@@ -843,6 +853,31 @@ export const screenshotTool: Tool = {
       scaleX: data.result.scale_x,
       scaleY: data.result.scale_y,
     };
+
+    // Step 2: Perform OCR (default true, first call may take longer for model loading)
+    const shouldIncludeOcr = args.includeOcr !== false;
+    if (shouldIncludeOcr) {
+      try {
+        const ocrResponse = await fetchWithRetry(`${PYTHON_SERVICE_URL}/api/ocr`, {
+          method: 'POST',
+          body: JSON.stringify({ image_path: screenshotResult.path }),
+        }, 3, 180000); // 180s timeout for OCR (first call needs model loading)
+        const ocrData = await ocrResponse.json();
+        if (ocrData.success && ocrData.result) {
+          const texts = ocrData.result.texts || [];
+          const ocrText = texts.map((t: any) => t.text).join('\n');
+          return {
+            ...screenshotResult,
+            ocr_text: ocrText,
+            ocr_regions: texts,
+          };
+        }
+      } catch (ocrErr) {
+        console.warn('[screenshot] OCR failed:', ocrErr);
+      }
+    }
+
+    return screenshotResult;
   },
 };
 

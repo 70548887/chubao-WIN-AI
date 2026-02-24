@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "chubao.skill.v1",
+  "id": "chubao.browser-controller",
+  "name": "Browser Controller",
+  "version": "0.1.0",
+  "description": "浏览器自动化控制 - 打开网页、点击、输入、截图等操作",
+  "entry": "./browser-controller.mjs",
+  "toolsExport": "skillTools",
+  "enabled": true,
+  "tags": [
+    "automation",
+    "browser",
+    "web"
+  ]
+}

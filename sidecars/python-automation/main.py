@@ -18,6 +18,7 @@ from PIL import Image
 from gui_control import GuiController
 from ocr_service import OcrService
 from browser_control import BrowserController
+from tts_service import synthesize_sync, get_voices_sync
 
 load_dotenv()
 
@@ -25,7 +26,14 @@ app = Flask(__name__)
 CORS(app)
 
 gui = GuiController()
-ocr = OcrService()
+# OCR service will be initialized lazily on first use
+ocr = None
+
+def get_ocr():
+    global ocr
+    if ocr is None:
+        ocr = OcrService()
+    return ocr
 browser = BrowserController()
 
 PORT = int(os.getenv("PYTHON_PORT", "3200"))
@@ -115,13 +123,14 @@ def _browser_controller() -> BrowserController:
 
 @app.route("/health", methods=["GET"])
 def health():
-    ocr_probe = ocr.health_probe()
+    ocr_probe = get_ocr().health_probe() if ocr else {"state": "not_initialized", "detail": {}}
     browser_probe = browser.health_probe()
     deps = {
         "gui": "ok",
         "ocr": ocr_probe.get("state", "degraded"),
         "browser": browser_probe.get("state", "degraded"),
         "screenshot": "ok",
+        "tts": "ok",
     }
 
     status = "ok" if all(state == "ok" for state in deps.values()) else "degraded"
@@ -138,6 +147,34 @@ def health():
             "browser": browser_probe.get("detail", {}),
         }
     )
+
+
+@app.route("/api/tts", methods=["POST"])
+def text_to_speech():
+    """文本转语音"""
+    try:
+        data = _body()
+        text = data.get("text", "").strip()
+        voice = data.get("voice", "zh-CN-XiaoxiaoNeural")
+        speed = float(data.get("speed", 1.0))
+
+        if not text:
+            return _error_response("INVALID_ARGUMENT", "text is required", 400)
+
+        result = synthesize_sync(text, voice, speed)
+        return _ok(result=result)
+    except Exception as exc:
+        return _exception_response(exc)
+
+
+@app.route("/api/tts/voices", methods=["GET"])
+def list_voices():
+    """获取支持的语音列表"""
+    try:
+        voices = get_voices_sync()
+        return _ok(voices=voices)
+    except Exception as exc:
+        return _exception_response(exc)
 
 
 @app.route("/api/windows", methods=["GET"])
@@ -690,11 +727,13 @@ def screenshot():
                     (model_width, model_height),
                     Image.Resampling.LANCZOS,
                 )
+                # Use JPEG with low quality to keep base64 small for proxy providers
+                rgb_image = resized.convert("RGB")
                 buffer = io.BytesIO()
-                resized.save(buffer, format="PNG")
+                rgb_image.save(buffer, format="JPEG", quality=35, optimize=True)
                 result["base64"] = base64.b64encode(buffer.getvalue()).decode("utf-8")
 
-            result["media_type"] = "image/png"
+            result["media_type"] = "image/jpeg"
             result["actual_size"] = [actual_width, actual_height]
             result["model_size"] = [model_width, model_height]
             result["scale_x"] = actual_width / model_width
@@ -715,7 +754,7 @@ def ocr_recognize():
             screenshot_result = gui.screenshot()
             image_path = screenshot_result.get("path")
 
-        result = ocr.recognize(str(image_path))
+        result = get_ocr().recognize(str(image_path))
         return _ok(result=result)
     except Exception as exc:
         return _exception_response(exc)
@@ -740,7 +779,7 @@ def ocr_find_text():
             screenshot_result = gui.screenshot()
             image_path = screenshot_result.get("path")
 
-        result = ocr.find_text(str(image_path), str(text))
+        result = get_ocr().find_text(str(image_path), str(text))
         return _ok(result=result)
     except Exception as exc:
         return _exception_response(exc)
@@ -763,7 +802,7 @@ def ocr_click_text():
         screenshot_result = gui.screenshot()
         image_path = screenshot_result.get("path")
 
-        find_result = ocr.find_text(str(image_path), str(text))
+        find_result = get_ocr().find_text(str(image_path), str(text))
         if not find_result.get("found"):
             return _error_response(
                 "SERVICE_UNAVAILABLE",

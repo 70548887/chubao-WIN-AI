@@ -10,6 +10,7 @@ import { ToolManager, toolManager } from '../tools/index.js';
 import { ToolSecurityGuard, type ToolSecurityPolicy } from './security.js';
 import { performanceMonitor } from '../monitoring/performance.js';
 import { logger } from '../utils/logger.js';
+import { SkillLoader } from '../skills/loader.js';
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import * as fsSync from 'node:fs';
@@ -262,6 +263,47 @@ async function callResponsesAPI(
 }
 
 /**
+ * Call OpenAI Chat Completions API via raw fetch.
+ * Most third-party proxies support this standard endpoint.
+ */
+async function callChatCompletionsAPI(
+  baseURL: string,
+  apiKey: string,
+  body: Record<string, unknown>,
+  timeoutMs = 120000,
+): Promise<Record<string, unknown>> {
+  const url = `${baseURL}/chat/completions`;
+  const bodyStr = JSON.stringify(body);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await globalThis.fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'Accept': 'application/json',
+      },
+      body: bodyStr,
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      try {
+        const errJson = JSON.parse(text);
+        throw Object.assign(new Error(`${res.status} ${errJson?.error?.message ?? text.slice(0, 200)}`), { status: res.status });
+      } catch (parseErr) {
+        if ((parseErr as any).status) throw parseErr;
+        throw Object.assign(new Error(`${res.status} ${text.slice(0, 200)}`), { status: res.status });
+      }
+    }
+    return await res.json() as Record<string, unknown>;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
  * Call Anthropic Messages API via raw fetch (bypasses SDK HTTP pipeline
  * which triggers Cloudflare WAF 403 on third-party proxies).
  */
@@ -271,7 +313,9 @@ async function callAnthropicMessagesAPI(
   body: Record<string, unknown>,
   timeoutMs = 120000,
 ): Promise<Record<string, unknown>> {
-  const url = `${baseURL}/v1/messages`;
+  // Normalize URL: strip trailing /v1 to avoid double /v1/v1/messages
+  const cleanBase = baseURL.replace(/\/v1\/?$/, '');
+  const url = `${cleanBase}/v1/messages`;
   const bodyStr = JSON.stringify(body);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -280,6 +324,7 @@ async function callAnthropicMessagesAPI(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'x-api-key': apiKey,
         'Authorization': `Bearer ${apiKey}`,
         'Accept': 'application/json',
         'anthropic-version': '2023-06-01',
@@ -573,11 +618,21 @@ export class AgentRuntime {
     8192,
   );
 
+  private skillLoader: SkillLoader;
+
   constructor(memoryManager: MemoryManager) {
     this.memoryManager = memoryManager;
     this.toolManager = toolManager;
     this.securityGuard = new ToolSecurityGuard();
     this.sessionStore = new AgentSessionStore();
+    
+    // 初始化技能加载器（从 node-backend 向上两级到根目录）
+    const rootDir = path.resolve(process.cwd(), '..', '..');
+    this.skillLoader = new SkillLoader({
+      skillsDir: path.join(rootDir, 'skills'),
+      workspaceDir: path.join(rootDir, 'skills'),
+    });
+    
     this.toolManager.initializeSkills().catch((error) => {
       logger.warn('Skill tools preload failed', { error: (error as Error).message });
     });
@@ -644,10 +699,10 @@ export class AgentRuntime {
     this.ohmygptModelName =
       parseNonEmptyString(process.env.OHMYGPT_MODEL) ??
       parseNonEmptyString(process.env.OPENAI_MODEL) ??
-      'gpt-5.3-codex';
+      'gpt-4o';
     this.krioModelName =
       parseNonEmptyString(process.env.KRIO_MODEL) ??
-      'claude-opus-4-6';
+      'claude-opus-4.6';
 
     // Active model is the primary provider's model
     this.modelName = this.provider === 'anthropic'
@@ -669,28 +724,55 @@ export class AgentRuntime {
   }
 
   async chat(message: string, sessionId?: string): Promise<string> {
-    const primary = this.provider;
-    // Build fallback order: try all other providers
-    const allProviders: AIProvider[] = ['openai', 'anthropic', 'ohmygpt', 'krio'];
-    const fallbacks = allProviders.filter((p) => p !== primary);
+    // Helper: check if a provider has valid credentials
+    const isConfigured = (p: AIProvider): boolean => {
+      if (p === 'ohmygpt') return !!this.ohmygptApiKey;
+      if (p === 'openai') return !!this.openaiApiKey;
+      if (p === 'anthropic') return !!this.anthropicClient;
+      if (p === 'krio') return !!this.krioApiKey;
+      return false;
+    };
+
+    // Use CHUBAO_AI_PROVIDER as primary; remaining configured providers as fallbacks
+    const allProviders: AIProvider[] = ['ohmygpt', 'openai', 'anthropic', 'krio'];
+    const primary: AIProvider | null = isConfigured(this.provider) ? this.provider : null;
+    const fallbacks = allProviders.filter(p => p !== this.provider && isConfigured(p));
+
+    // If primary isn't configured, promote first fallback
+    const effectivePrimary = primary ?? fallbacks.shift() ?? null;
+    if (!effectivePrimary) {
+      return '错误: 未配置任何可用的 AI API Key';
+    }
+
+    logger.info(`使用主提供商: ${effectivePrimary} (配置: ${this.provider}), 备选: ${fallbacks.join(', ') || '无'}`, {
+      primary: effectivePrimary,
+      configured: this.provider,
+      fallbacks,
+    });
 
     try {
-      return await this.chatByProvider(primary, message, sessionId);
+      return await this.chatByProvider(effectivePrimary, message, sessionId);
     } catch (primaryError) {
+      logger.error(`主提供商 (${effectivePrimary}) 失败`, { error: (primaryError as Error).message });
+      
       for (const fallback of fallbacks) {
-        logger.warn(`Primary provider (${primary}) failed, trying ${fallback} (simple mode)...`, {
-          primary,
+        logger.warn(`切换到备选提供商: ${fallback} (简化模式)...`, {
+          primary: effectivePrimary,
           fallback,
-          error: (primaryError as Error).message,
         });
         try {
           return await this.chatSimpleByProvider(fallback, message, sessionId);
         } catch (fallbackError) {
-          logger.warn(`Fallback provider (${fallback}) also failed`, { error: (fallbackError as Error).message });
+          logger.error(`备选提供商 (${fallback}) 也失败`, { error: (fallbackError as Error).message });
         }
       }
       return `处理消息时出错: ${(primaryError as Error).message}`;
     }
+  }
+
+  /** Detect if a model name is Anthropic/Claude (vs OpenAI/GPT) */
+  private isAnthropicModel(model: string): boolean {
+    return /claude|anthropic/i.test(model);
   }
 
   private async chatByProvider(provider: AIProvider, message: string, sessionId?: string): Promise<string> {
@@ -698,10 +780,18 @@ export class AgentRuntime {
       return this.chatOpenAI(message, sessionId);
     }
     if (provider === 'ohmygpt') {
+      // Auto-detect API format based on model name
+      if (this.isAnthropicModel(this.ohmygptModelName)) {
+        return this.chatAnthropicCompatible(this.ohmygptBaseURL, this.ohmygptApiKey, this.ohmygptModelName, 'OhMyGPT', message, sessionId);
+      }
       return this.chatOpenAICompatible(this.ohmygptBaseURL, this.ohmygptApiKey, this.ohmygptModelName, 'OhMyGPT', message, sessionId);
     }
     if (provider === 'krio') {
-      return this.chatAnthropicCompatible(this.krioBaseURL, this.krioApiKey, this.krioModelName, 'Krio', message, sessionId);
+      // Auto-detect API format based on model name
+      if (this.isAnthropicModel(this.krioModelName)) {
+        return this.chatAnthropicCompatible(this.krioBaseURL, this.krioApiKey, this.krioModelName, 'Krio', message, sessionId);
+      }
+      return this.chatOpenAICompatible(this.krioBaseURL, this.krioApiKey, this.krioModelName, 'Krio', message, sessionId);
     }
     return this.chatAnthropic(message, sessionId);
   }
@@ -714,67 +804,77 @@ export class AgentRuntime {
       const fallbackMaxTokens = 256;
       logger.warn(`Using OpenAI fallback with max_tokens=${fallbackMaxTokens}`, { provider: 'openai', maxTokens: fallbackMaxTokens });
       
-      const response = await callResponsesAPI(this.openaiBaseURL, this.openaiApiKey, {
+      const response = await callChatCompletionsAPI(this.openaiBaseURL, this.openaiApiKey, {
         model: this.openaiModelName,
-        input: [{ role: 'user', content: message }],
-        max_output_tokens: fallbackMaxTokens,
-        store: false,
+        max_tokens: fallbackMaxTokens,
+        messages: [
+          { role: 'system', content: `你是 Chubao AI，一个 Windows 本地 AI 助手。当前底层模型: ${this.openaiModelName}（回退模式）。请简洁回答用户问题。` },
+          { role: 'user', content: message },
+        ],
       });
       
-      const output = Array.isArray(response.output) ? response.output : [];
-      for (const item of output) {
-        if ((item as any)?.type === 'message' && Array.isArray((item as any).content)) {
-          for (const block of (item as any).content) {
-            if (block?.type === 'output_text' && typeof block.text === 'string') {
-              return block.text;
-            }
-          }
-        }
-      }
-      return '抱歉，无法生成回复。';
+      const choices = response.choices as any[];
+      return choices?.[0]?.message?.content ?? '抱歉，无法生成回复。';
     }
-    // OhMyGPT simple fallback (OpenAI-compatible)
+    // OhMyGPT simple fallback (auto-detect API format from model name)
     if (provider === 'ohmygpt') {
       if (!this.ohmygptApiKey) throw new Error('No OHMYGPT_API_KEY for fallback');
       
       const fallbackMaxTokens = 256;
       logger.warn(`Using OhMyGPT fallback with max_tokens=${fallbackMaxTokens}`, { provider: 'ohmygpt', maxTokens: fallbackMaxTokens });
       
-      const response = await callResponsesAPI(this.ohmygptBaseURL, this.ohmygptApiKey, {
-        model: this.ohmygptModelName,
-        input: [{ role: 'user', content: message }],
-        max_output_tokens: fallbackMaxTokens,
-        store: false,
-      });
-      
-      const output = Array.isArray(response.output) ? response.output : [];
-      for (const item of output) {
-        if ((item as any)?.type === 'message' && Array.isArray((item as any).content)) {
-          for (const block of (item as any).content) {
-            if (block?.type === 'output_text' && typeof block.text === 'string') {
-              return block.text;
-            }
-          }
-        }
+      if (this.isAnthropicModel(this.ohmygptModelName)) {
+        const response = await callAnthropicMessagesAPI(this.ohmygptBaseURL, this.ohmygptApiKey, {
+          model: this.ohmygptModelName,
+          max_tokens: fallbackMaxTokens,
+          system: [{ type: 'text', text: `你是 Chubao AI，一个 Windows 本地 AI 助手。当前底层模型: ${this.ohmygptModelName}（回退模式）。请简洁回答用户问题。` }],
+          messages: [{ role: 'user', content: message }],
+        });
+        const content = response.content as any[];
+        const textBlock = content?.find((b: any) => b.type === 'text');
+        return textBlock?.text ?? '';
+      } else {
+        const response = await callChatCompletionsAPI(this.ohmygptBaseURL, this.ohmygptApiKey, {
+          model: this.ohmygptModelName,
+          max_tokens: fallbackMaxTokens,
+          messages: [
+            { role: 'system', content: `你是 Chubao AI，一个 Windows 本地 AI 助手。当前底层模型: ${this.ohmygptModelName}（回退模式）。请简洁回答用户问题。` },
+            { role: 'user', content: message },
+          ],
+        });
+        const choices = response.choices as any[];
+        return choices?.[0]?.message?.content ?? '抱歉，无法生成回复。';
       }
-      return '抱歉，无法生成回复。';
     }
-    // Krio simple fallback (Anthropic-compatible via raw fetch)
+    // Krio simple fallback (auto-detect API format from model name)
     if (provider === 'krio') {
       if (!this.krioApiKey) throw new Error('No KRIO_API_KEY for fallback');
       
       const fallbackMaxTokens = 256;
       logger.warn(`Using Krio fallback with max_tokens=${fallbackMaxTokens}`, { provider: 'krio', maxTokens: fallbackMaxTokens });
       
-      const response = await callAnthropicMessagesAPI(this.krioBaseURL, this.krioApiKey, {
-        model: this.krioModelName,
-        max_tokens: fallbackMaxTokens,
-        system: [{ type: 'text', text: `你是 Chubao AI，一个 Windows 本地 AI 助手。当前底层模型: ${this.krioModelName}（回退模式）。请简洁回答用户问题。` }],
-        messages: [{ role: 'user', content: message }],
-      });
-      const content = response.content as any[];
-      const textBlock = content?.find((b: any) => b.type === 'text');
-      return textBlock?.text ?? '';
+      if (this.isAnthropicModel(this.krioModelName)) {
+        const response = await callAnthropicMessagesAPI(this.krioBaseURL, this.krioApiKey, {
+          model: this.krioModelName,
+          max_tokens: fallbackMaxTokens,
+          system: [{ type: 'text', text: `你是 Chubao AI，一个 Windows 本地 AI 助手。当前底层模型: ${this.krioModelName}（回退模式）。请简洁回答用户问题。` }],
+          messages: [{ role: 'user', content: message }],
+        });
+        const content = response.content as any[];
+        const textBlock = content?.find((b: any) => b.type === 'text');
+        return textBlock?.text ?? '';
+      } else {
+        const response = await callChatCompletionsAPI(this.krioBaseURL, this.krioApiKey, {
+          model: this.krioModelName,
+          max_tokens: fallbackMaxTokens,
+          messages: [
+            { role: 'system', content: `你是 Chubao AI，一个 Windows 本地 AI 助手。当前底层模型: ${this.krioModelName}（回退模式）。请简洁回答用户问题。` },
+            { role: 'user', content: message },
+          ],
+        });
+        const choices = response.choices as any[];
+        return choices?.[0]?.message?.content ?? '抱歉，无法生成回复。';
+      }
     }
     // Anthropic simple fallback - minimal system prompt, no tools
     if (!this.anthropicClient) throw new Error('No ANTHROPIC_API_KEY for fallback');
@@ -1047,7 +1147,8 @@ export class AgentRuntime {
 
   /**
    * Generic OpenAI-compatible chat method for third-party providers (e.g. OhMyGPT).
-   * Full multi-turn tool loop via Responses API, same logic as chatOpenAI.
+   * Uses standard Chat Completions API (/v1/chat/completions) which is widely supported by proxies.
+   * Full multi-turn tool loop support.
    */
   private async chatOpenAICompatible(
     baseURL: string,
@@ -1067,80 +1168,52 @@ export class AgentRuntime {
       const normalizedSessionId = this.normalizeSessionId(sessionId);
 
       await this.toolManager.initializeSkills();
-      const toolDefs = this.toolManager.getToolDefinitions();
-      // Prioritize dev tools first so they survive 8KB body trim
-      const DEV_PRIORITY = new Set([
+      const allToolDefs = this.toolManager.getToolDefinitions();
+      // Prioritize dev tools for proxy providers (keep body size manageable)
+      const DEV_TOOL_NAMES = new Set([
         'read_file', 'write_file', 'edit_file', 'list_dir', 'search_files',
         'run_command', 'create_skill', 'list_skills', 'get_coding_progress',
-        'screenshot', 'click', 'type_text', 'hotkey',
-        'restart_sidecar', 'validate_code',  // Self-upgrade tools
-        'git_backup', 'git_rollback', 'health_check', 'log_self_upgrade', 'get_self_upgrade_history',  // Long-running support
-        'send_notification', 'send_channel_message', 'get_channel_status',  // Channel notification tools
-        'call_claude_code', 'call_opencode', 'call_cursor', 'list_available_clis',  // External AI CLI tools
-        'spawn_subagent', 'get_subagent_status', 'list_subagents', 'cancel_subagent',  // Subagent tools
-        'list_agents', 'start_agent', 'stop_agent', 'get_agent_status', 'register_custom_agent', 'delegate_to_agent',  // Multi-agent routing
+        'screenshot', 'ocr', 'click', 'type_text', 'hotkey',
       ]);
-      const sortedDefs = [
-        ...toolDefs.filter((t) => DEV_PRIORITY.has(t.name)),
-        ...toolDefs.filter((t) => !DEV_PRIORITY.has(t.name)),
-      ];
-      const tools = sortedDefs.map((t) => ({
+      const filteredDefs = allToolDefs.filter((t: any) => DEV_TOOL_NAMES.has(t.name));
+      logger.info(`[${providerLabel}] Sending ${filteredDefs.length}/${allToolDefs.length} tools (Chat Completions)`, { toolCount: filteredDefs.length, totalCount: allToolDefs.length });
+
+      // Chat Completions API tool format
+      const tools = filteredDefs.map((t: any) => ({
         type: 'function' as const,
-        name: t.name,
-        description: t.description ?? '',
-        parameters: t.input_schema ?? {},
-        strict: false,
+        function: {
+          name: t.name,
+          description: t.description ?? '',
+          parameters: t.input_schema ?? {},
+        },
       }));
 
       const history = this.loadSessionMessages(normalizedSessionId);
-      const inputMessages: Array<Record<string, unknown>> = [];
+      const apiMessages: Array<Record<string, unknown>> = [
+        { role: 'system', content: systemPrompt },
+      ];
       for (const msg of history) {
         if (typeof msg.content === 'string') {
-          inputMessages.push({ role: msg.role, content: msg.content });
+          apiMessages.push({ role: msg.role, content: msg.content });
         }
       }
-      inputMessages.push({ role: 'user', content: message });
+      apiMessages.push({ role: 'user', content: message });
 
       let finalResponse = '';
       let lastToolSummary = '';
-      let currentInput: any = inputMessages;
 
       for (let iteration = 0; iteration < this.maxIterations; iteration++) {
-        const params: any = {
+        const body: Record<string, unknown> = {
           model: modelName,
-          instructions: systemPrompt,
-          input: currentInput,
-          store: false,
+          messages: apiMessages,
         };
-
-        // Dynamically trim tools to stay within proxy body size limit (~8KB)
-        // IMPORTANT: use Buffer.byteLength for UTF-8 byte count (Chinese chars = 3 bytes each)
-        if (tools.length > 0) {
-          const baseJson = JSON.stringify(params);
-          const baseSize = Buffer.byteLength(baseJson, 'utf-8');
-          const maxBodySize = 7600;
-          if (baseSize < maxBodySize) {
-            const budget = maxBodySize - baseSize;
-            const fittingTools: typeof tools = [];
-            let toolsSize = 0;
-            for (const tool of tools) {
-              const toolSize = Buffer.byteLength(JSON.stringify(tool), 'utf-8') + 1;
-              if (toolsSize + toolSize > budget) break;
-              fittingTools.push(tool);
-              toolsSize += toolSize;
-            }
-            if (fittingTools.length > 0) {
-              params.tools = fittingTools;
-              if (fittingTools.length < tools.length) {
-                logger.info(`[${providerLabel}] Trimmed tools: ${fittingTools.length}/${tools.length}`, { fittingCount: fittingTools.length, totalCount: tools.length, baseSize, toolsSize, maxBodySize });
-              }
-            }
-          }
+        if (tools.length > 0 && iteration < 5) {
+          body.tools = tools;
         }
 
         let response: Record<string, unknown>;
         try {
-          response = await callResponsesAPI(baseURL, apiKey, params);
+          response = await callChatCompletionsAPI(baseURL, apiKey, body);
         } catch (apiErr: any) {
           if ((apiErr?.status === 400 || apiErr?.status === 413) && iteration > 0) {
             logger.warn(`[${providerLabel}] API error on iteration ${iteration}, returning last response`, { iteration, status: apiErr?.status });
@@ -1149,33 +1222,30 @@ export class AgentRuntime {
           throw apiErr;
         }
 
-        const output = Array.isArray(response.output) ? response.output : [];
+        const choices = response.choices as any[];
+        const choice = choices?.[0];
+        if (!choice) break;
 
-        // Extract text output
-        for (const item of output) {
-          if (item && (item as any).type === 'message' && Array.isArray((item as any).content)) {
-            for (const block of (item as any).content) {
-              if (block && block.type === 'output_text' && typeof block.text === 'string') {
-                finalResponse = block.text;
-              }
-            }
-          }
+        const assistantMsg = choice.message;
+        apiMessages.push(assistantMsg);
+
+        if (assistantMsg.content) {
+          finalResponse = assistantMsg.content;
         }
 
-        // Check for function calls
-        const funcCalls = output.filter((item: any) => item?.type === 'function_call');
-        if (funcCalls.length === 0) {
+        // Check for tool calls
+        const toolCalls = assistantMsg.tool_calls;
+        if (!toolCalls || toolCalls.length === 0) {
           break;
         }
 
         const toolSummaryLines: string[] = [];
-        const nextInput: any[] = [...(Array.isArray(currentInput) ? currentInput : []), ...output];
 
-        for (const fc of funcCalls) {
-          const toolName = (fc as any).name as string;
+        for (const tc of toolCalls) {
+          const toolName = tc.function?.name as string;
           let toolArgs: Record<string, unknown> = {};
           try {
-            toolArgs = JSON.parse(((fc as any).arguments as string) || '{}');
+            toolArgs = JSON.parse(tc.function?.arguments || '{}');
           } catch {
             toolArgs = {};
           }
@@ -1187,18 +1257,17 @@ export class AgentRuntime {
             const result = await this.executeTool(toolName, executionInput);
             const modelResult = this.adaptToolResultForModel(toolName, result);
             const content = this.serializeToolContent(modelResult);
-            nextInput.push({ type: 'function_call_output', call_id: (fc as any).call_id, output: content });
+            apiMessages.push({ role: 'tool', tool_call_id: tc.id, content });
             toolSummaryLines.push(`- ${toolName}: ${content.slice(0, 600)}`);
           } catch (error) {
             const errorMessage = this.getErrorMessage(error);
             logger.error(`[${providerLabel}] Tool execution failed ${toolName}`, error, { tool: toolName });
-            nextInput.push({ type: 'function_call_output', call_id: (fc as any).call_id, output: `tool_error: ${errorMessage}` });
+            apiMessages.push({ role: 'tool', tool_call_id: tc.id, content: `tool_error: ${errorMessage}` });
             toolSummaryLines.push(`- ${toolName}: tool_error: ${errorMessage}`);
           }
         }
 
         lastToolSummary = toolSummaryLines.join('\n');
-        currentInput = nextInput;
       }
 
       if (!finalResponse && lastToolSummary) {
@@ -1287,12 +1356,36 @@ export class AgentRuntime {
         try {
           response = await callAnthropicMessagesAPI(baseURL, apiKey, body);
         } catch (apiErr: any) {
-          // On 400 context limit, retry without tools if this is a follow-up iteration
+          // On 400 context limit, strip image blocks from messages and retry once
           if (apiErr?.status === 400 && iteration > 0) {
-            logger.warn(`[${providerLabel}] Context limit hit on iteration ${iteration}, returning last response`, { iteration });
-            break;
+            logger.warn(`[${providerLabel}] Context limit hit on iteration ${iteration}, stripping images and retrying`, { iteration });
+            const stripped = this.stripImageBlocksFromMessages(apiMessages);
+            const retryBody: Record<string, unknown> = {
+              model: modelName,
+              max_tokens: this.maxTokens,
+              system: [{ type: 'text', text: systemPrompt }],
+              messages: stripped,
+            };
+            try {
+              response = await callAnthropicMessagesAPI(baseURL, apiKey, retryBody);
+            } catch (retryErr: any) {
+              logger.warn(`[${providerLabel}] Retry after stripping images also failed, trying minimal recovery`, { iteration });
+              // Try a minimal fresh request with just the image from the last tool result
+              try {
+                const minimalResp = await this.minimalScreenshotRecovery(
+                  baseURL, apiKey, modelName, providerLabel, message, apiMessages, lastToolSummary,
+                );
+                if (minimalResp) {
+                  finalResponse = minimalResp;
+                }
+              } catch (minErr: any) {
+                logger.warn(`[${providerLabel}] Minimal recovery also failed`, { error: minErr?.message });
+              }
+              break;
+            }
+          } else {
+            throw apiErr;
           }
-          throw apiErr;
         }
 
         const content = response.content as any[];
@@ -1622,6 +1715,7 @@ export class AgentRuntime {
     provider: AIProvider;
     openai: { model: string; baseUrl: string; hasKey: boolean };
     anthropic: { model: string; baseUrl: string; hasKey: boolean };
+    ohmygpt: { model: string; baseUrl: string; hasKey: boolean };
   } {
     return {
       provider: this.provider,
@@ -1635,6 +1729,11 @@ export class AgentRuntime {
         baseUrl: parseNonEmptyString(process.env.ANTHROPIC_BASE_URL) ?? 'https://api.anthropic.com',
         hasKey: !!parseNonEmptyString(process.env.ANTHROPIC_API_KEY),
       },
+      ohmygpt: {
+        model: this.ohmygptModelName,
+        baseUrl: parseNonEmptyString(process.env.OHMYGPT_BASE_URL) ?? 'https://api.ohmygpt.com/v1',
+        hasKey: !!parseNonEmptyString(process.env.OHMYGPT_API_KEY),
+      },
     };
   }
 
@@ -1646,6 +1745,9 @@ export class AgentRuntime {
     anthropicModel?: string;
     anthropicBaseUrl?: string;
     anthropicApiKey?: string;
+    ohmygptModel?: string;
+    ohmygptBaseUrl?: string;
+    ohmygptApiKey?: string;
   }): void {
     if (patch.provider === 'openai' || patch.provider === 'anthropic' || patch.provider === 'ohmygpt' || patch.provider === 'krio') {
       this.provider = patch.provider as AIProvider;
@@ -1695,6 +1797,37 @@ export class AgentRuntime {
       process.env.ANTHROPIC_API_KEY = patch.anthropicApiKey;
       const baseURL = parseNonEmptyString(process.env.ANTHROPIC_BASE_URL);
       this.anthropicClient = new Anthropic(baseURL ? { apiKey: patch.anthropicApiKey, baseURL } : { apiKey: patch.anthropicApiKey });
+    }
+    if (patch.ohmygptModel) {
+      this.ohmygptModelName = patch.ohmygptModel;
+      process.env.OHMYGPT_MODEL = patch.ohmygptModel;
+    }
+    if (patch.ohmygptBaseUrl) {
+      process.env.OHMYGPT_BASE_URL = patch.ohmygptBaseUrl;
+      this.ohmygptBaseURL = patch.ohmygptBaseUrl;
+      const key = parseNonEmptyString(process.env.OHMYGPT_API_KEY);
+      if (key) {
+        this.ohmygptClient = new OpenAI({
+          apiKey: key,
+          baseURL: patch.ohmygptBaseUrl,
+          maxRetries: 3,
+          timeout: 120000,
+          fetch: createCleanFetch(),
+        });
+      }
+    }
+    if (patch.ohmygptApiKey) {
+      process.env.OHMYGPT_API_KEY = patch.ohmygptApiKey;
+      this.ohmygptApiKey = patch.ohmygptApiKey;
+      const baseURL = parseNonEmptyString(process.env.OHMYGPT_BASE_URL) ?? 'https://api.ohmygpt.com/v1';
+      this.ohmygptBaseURL = baseURL;
+      this.ohmygptClient = new OpenAI({
+        apiKey: patch.ohmygptApiKey,
+        baseURL,
+        maxRetries: 3,
+        timeout: 120000,
+        fetch: createCleanFetch(),
+      });
     }
     this.modelName = this.provider === 'anthropic'
       ? this.anthropicModelName
@@ -1973,6 +2106,107 @@ export class AgentRuntime {
       .trim();
   }
 
+  /**
+   * Strip image blocks from messages to reduce context size when hitting limits.
+   * Replaces image blocks with a text placeholder so the model knows an image was present.
+   */
+  private stripImageBlocksFromMessages(messages: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
+    return messages.map((msg) => {
+      const content = msg.content;
+      if (!Array.isArray(content)) return msg;
+      const stripped = content.map((block: any) => {
+        if (block?.type === 'image') {
+          return { type: 'text', text: '[screenshot image omitted due to context limit - please describe what you saw]' };
+        }
+        if (block?.type === 'tool_result' && Array.isArray(block.content)) {
+          const newContent = block.content.map((inner: any) => {
+            if (inner?.type === 'image') {
+              return { type: 'text', text: '[screenshot image omitted due to context limit]' };
+            }
+            return inner;
+          });
+          return { ...block, content: newContent };
+        }
+        return block;
+      });
+      return { ...msg, content: stripped };
+    });
+  }
+
+  /**
+   * When context limit is hit even after stripping images, try a minimal fresh request.
+   * Extracts the last screenshot image from apiMessages and sends it alone with the user's question.
+   * Falls back to text-only summary if no image is found.
+   */
+  private async minimalScreenshotRecovery(
+    baseURL: string,
+    apiKey: string,
+    modelName: string,
+    providerLabel: string,
+    userMessage: string,
+    apiMessages: Array<Record<string, unknown>>,
+    lastToolSummary: string,
+  ): Promise<string | null> {
+    // Try to find the last screenshot image block from tool results
+    let imageBlock: Record<string, unknown> | null = null;
+    for (let i = apiMessages.length - 1; i >= 0; i--) {
+      const content = apiMessages[i].content;
+      if (!Array.isArray(content)) continue;
+      for (const block of content) {
+        if (block?.type === 'tool_result' && Array.isArray(block.content)) {
+          for (const inner of block.content) {
+            if (inner?.type === 'image') {
+              imageBlock = inner as Record<string, unknown>;
+              break;
+            }
+          }
+        }
+        if (imageBlock) break;
+      }
+      if (imageBlock) break;
+    }
+
+    const minimalMessages: Array<Record<string, unknown>> = [];
+    if (imageBlock) {
+      // Send just the image + the user's question
+      logger.info(`[${providerLabel}] Minimal recovery: sending image-only request`);
+      minimalMessages.push({
+        role: 'user',
+        content: [
+          imageBlock,
+          { type: 'text', text: `这是刚才截取的屏幕截图。${userMessage}` },
+        ],
+      });
+    } else if (lastToolSummary) {
+      // No image found, use text summary
+      logger.info(`[${providerLabel}] Minimal recovery: sending text-only summary`);
+      minimalMessages.push({
+        role: 'user',
+        content: `工具执行结果:\n${lastToolSummary}\n\n请基于以上结果回答：${userMessage}`,
+      });
+    } else {
+      return null;
+    }
+
+    const minimalBody: Record<string, unknown> = {
+      model: modelName,
+      max_tokens: Math.min(this.maxTokens, 4096),
+      messages: minimalMessages,
+    };
+
+    const resp = await callAnthropicMessagesAPI(baseURL, apiKey, minimalBody);
+    const respContent = resp.content as any[];
+    if (Array.isArray(respContent)) {
+      for (const block of respContent) {
+        if (block?.type === 'text' && typeof block.text === 'string') {
+          logger.info(`[${providerLabel}] Minimal recovery succeeded`);
+          return block.text;
+        }
+      }
+    }
+    return null;
+  }
+
   private buildToolResultContent(toolName: string, result: unknown): ToolResultContent {
     if (toolName === 'browser_screenshot') {
       const screenshot = this.asVisionScreenshotResult(result);
@@ -2008,6 +2242,19 @@ export class AgentRuntime {
     const screenshot = this.asVisionScreenshotResult(result);
     if (!screenshot) {
       return this.serializeToolContent(result);
+    }
+
+    // If OCR text is available, prefer text over base64 image to avoid context limits
+    const ocrText = this.isRecord(result) ? (result.ocr_text as string | undefined) : undefined;
+    if (ocrText && ocrText.length > 0) {
+      const path = typeof screenshot.path === 'string' && screenshot.path ? screenshot.path : 'unknown';
+      const modelSizeText = this.formatScreenshotSize(screenshot.modelSize ?? screenshot.model_size ?? screenshot.size);
+      return [
+        {
+          type: 'text',
+          text: `Screenshot saved: ${path}, model_size: ${modelSizeText}\n\nOCR recognized text from screenshot:\n${ocrText}`,
+        },
+      ];
     }
 
     const mediaType = this.normalizeImageMediaType(screenshot.mediaType ?? screenshot.media_type);
@@ -2464,24 +2711,58 @@ export class AgentRuntime {
           ? this.ohmygptModelName
           : this.anthropicModelName;
 
-    return `你是 Chubao AI，一个 Windows 本地 AI 自动化助手（底层模型: ${modelId}，服务商: ${this.provider}）。
+    // 加载技能并生成技能提示
+    let skillsPrompt = '';
+    try {
+      const skills = this.skillLoader.loadSkills();
+      if (skills.length > 0) {
+        skillsPrompt = this.skillLoader.formatSkillsForPrompt(skills);
+      }
+    } catch (error) {
+      logger.warn('Failed to load skills for system prompt', { error: (error as Error).message });
+    }
 
-## 核心能力
-- 桌面自动化: screenshot, click, type_text, hotkey, ocr_recognize 等 GUI 工具
-- 文件操作: read_file, write_file, edit_file, list_dir, search_files
-- 命令执行: run_command (PowerShell, 30s超时, 危险命令已屏蔽)
-- 技能管理: create_skill, list_skills (创建可复用的自动化技能)
-- 编码进度: get_coding_progress (git变更分析)
+    return `你是 Chubao AI，一个运行在用户本地 Windows 电脑上的 AI 助手（底层模型: ${modelId}，服务商: ${this.provider}）。
+**重要：当提及你的底层模型时，必须使用完整模型标识 "${modelId}"，禁止自行简化或缩写。**
 
-## 工具使用规则
-1. 当用户要求操作文件时，优先使用 read_file/write_file/edit_file
-2. 修改代码前先用 read_file 查看文件内容
-3. 用 edit_file 做精确替换，而不是重写整个文件
-4. 创建新功能时可用 create_skill 将其封装为可复用技能
-5. 路径可以是绝对路径或相对于工作区根目录的路径
+## 🎯 你的核心能力（你可以直接使用这些工具）
 
-## 坐标系
+### 桌面自动化（你可以控制用户的电脑）
+- **screenshot** - 📸 截图！你可以看到用户的屏幕
+- **click** - 鼠标点击指定位置
+- **type_text** - 键盘输入文字
+- **hotkey** - 发送快捷键（如 ctrl+s）
+- **ocr_recognize** - 识别屏幕上的文字
+
+### 文件操作
+- **read_file** - 读取文件内容
+- **write_file** - 写入文件
+- **edit_file** - 编辑文件（精确替换）
+- **list_dir** - 列出目录
+- **search_files** - 搜索文件内容
+
+### 命令执行
+- **run_command** - 执行 PowerShell 命令（30秒超时，危险命令已屏蔽）
+
+### 技能管理
+- **create_skill** - 创建可复用的自动化技能
+- **list_skills** - 列出已有技能
+${skillsPrompt}
+
+## 📝 工具使用规则
+
+1. **当用户问"屏幕上有什么"或"你能截图吗"时，主动调用 screenshot 工具截图并分析**
+2. 当用户要求操作文件时，优先使用 read_file/write_file/edit_file
+3. 修改代码前先用 read_file 查看文件内容
+4. 用 edit_file 做精确替换，而不是重写整个文件
+5. 创建新功能时可用 create_skill 将其封装为可复用技能
+6. 路径可以是绝对路径或相对于工作区根目录的路径
+
+## 📐 坐标系
 模型视口: ${this.modelViewportWidth}x${this.modelViewportHeight}，系统自动映射实际屏幕坐标。
+
+## 💡 重要提醒
+**你是本地运行的 AI，有完整的系统权限。用户问你能否做某事时，如果你确实有对应工具，要回答"能"并主动使用工具演示，不要说自己不能做。**
 
 请简洁友好地回答用户问题，遇到需要操作时主动使用工具完成。${memoryContext}`;
   }

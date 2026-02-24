@@ -165,6 +165,16 @@ function ModelComboBox({
   );
 }
 
+const OHMYGPT_MODELS = [
+  'gpt-4o',
+  'gpt-4o-mini',
+  'claude-opus-4',
+  'claude-sonnet-4',
+  'claude-3-7-sonnet',
+  'deepseek-chat',
+  'deepseek-reasoner',
+];
+
 function ProviderCard({
   label,
   providerKey,
@@ -175,7 +185,7 @@ function ProviderCard({
   t,
 }: {
   label: string;
-  providerKey: 'openai' | 'anthropic';
+  providerKey: 'openai' | 'anthropic' | 'ohmygpt';
   info: ModelConfig['openai'];
   isActive: boolean;
   onSave: (patch: Record<string, string>) => void;
@@ -186,10 +196,10 @@ function ProviderCard({
   const [baseUrl, setBaseUrl] = useState(info.baseUrl);
   const [apiKey, setApiKey] = useState('');
 
-  const modelField = providerKey === 'openai' ? 'openaiModel' : 'anthropicModel';
-  const baseUrlField = providerKey === 'openai' ? 'openaiBaseUrl' : 'anthropicBaseUrl';
-  const apiKeyField = providerKey === 'openai' ? 'openaiApiKey' : 'anthropicApiKey';
-  const modelOptions = providerKey === 'openai' ? OPENAI_MODELS : ANTHROPIC_MODELS;
+  const modelField = providerKey === 'openai' ? 'openaiModel' : providerKey === 'ohmygpt' ? 'ohmygptModel' : 'anthropicModel';
+  const baseUrlField = providerKey === 'openai' ? 'openaiBaseUrl' : providerKey === 'ohmygpt' ? 'ohmygptBaseUrl' : 'anthropicBaseUrl';
+  const apiKeyField = providerKey === 'openai' ? 'openaiApiKey' : providerKey === 'ohmygpt' ? 'ohmygptApiKey' : 'anthropicApiKey';
+  const modelOptions = providerKey === 'openai' ? OPENAI_MODELS : providerKey === 'ohmygpt' ? OHMYGPT_MODELS : ANTHROPIC_MODELS;
 
   const handleSave = () => {
     const patch: Record<string, string> = {};
@@ -215,7 +225,7 @@ function ProviderCard({
             value={model}
             onChange={setModel}
             options={modelOptions}
-            placeholder={providerKey === 'openai' ? 'e.g. gpt-4o' : 'e.g. claude-sonnet-4-20250514'}
+            placeholder={providerKey === 'openai' ? 'e.g. gpt-4o' : providerKey === 'ohmygpt' ? 'e.g. gpt-4o 或 claude-opus-4' : 'e.g. claude-sonnet-4-20250514'}
           />
         </label>
         <label className="model-field">
@@ -276,7 +286,7 @@ export default function ModelConfigSection() {
     );
   }
 
-  const handleProviderSwitch = (provider: 'openai' | 'anthropic') => {
+  const handleProviderSwitch = (provider: 'openai' | 'anthropic' | 'ohmygpt') => {
     if (provider !== config.provider) {
       saveConfig({ provider });
     }
@@ -354,6 +364,12 @@ export default function ModelConfigSection() {
           >
             Anthropic
           </button>
+          <button
+            className={`provider-btn ${config.provider === 'ohmygpt' ? 'active' : ''}`}
+            onClick={() => handleProviderSwitch('ohmygpt')}
+          >
+            OhMyGPT
+          </button>
         </div>
       </div>
 
@@ -372,6 +388,15 @@ export default function ModelConfigSection() {
           providerKey="anthropic"
           info={config.anthropic}
           isActive={config.provider === 'anthropic'}
+          onSave={saveConfig}
+          saving={saving}
+          t={t}
+        />
+        <ProviderCard
+          label="OhMyGPT 中转"
+          providerKey="ohmygpt"
+          info={config.ohmygpt}
+          isActive={config.provider === 'ohmygpt'}
           onSave={saveConfig}
           saving={saving}
           t={t}
